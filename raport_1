@@ -1,0 +1,140 @@
+Punkt 1.18.
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pgsql-rbd2
+spec:
+  serviceName: pgsql-rbd2-service
+  selector:
+    matchLabels:
+      app: pgsql-rbd2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: pgsql-rbd2
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3d-rbdcluster-agent-1
+      containers:
+        - name: pgsql-rbd2
+          image: postgres:13.4
+          volumeMounts:
+            - name: pgsql-rbd2-disk
+              mountPath: /data
+          env:
+            - name: POSTGRES_PASSWORD
+              value: rbd2
+            - name: PGDATA
+              value: /data/pgdata
+  volumeClaimTemplates:
+    - metadata:
+        name: pgsql-rbd2-disk
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 25Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgsql-rbd2-lb
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 5433
+    targetPort: 5432
+  selector:
+    app: pgsql-rbd2
+
+Punkt 1.19.
+
+[rbd@rbd ~]$ kubectl apply -f rbd2.yaml
+statefulset.apps/pgsql-rbd2 created
+service/pgsql-rbd2-lb created
+[rbd@rbd ~]$ kubectl get sts --watch
+NAME         READY   AGE
+pgsql-rbd1   1/1     3m53s
+pgsql-rbd2   0/1     10s
+pgsql-rbd2   1/1     14s
+
+Punkt 2.13.
+
+CREATE SERVER rbd1
+FOREIGN DATA WRAPPER postgres_fdw
+OPTIONS (host 'pgsql-rbd1-lb', port '5432', dbname 'postgres');
+
+CREATE USER MAPPING FOR postgres SERVER rbd1
+OPTIONS (user 'postgres', password 'rbd1');
+
+IMPORT FOREIGN SCHEMA public LIMIT TO (pracownicy)
+FROM SERVER rbd1 INTO public;
+
+postgres@RBD1:5433# select * from pracownicy;
+ id_prac |  nazwisko   |    etat    | id_szefa | zatrudniony | placa_pod | placa_dod | id_zesp 
+---------+-------------+------------+----------+-------------+-----------+-----------+---------
+     110 | BLAZEWICZ   | PROFESOR   |      100 | 1973-05-01  |   1350.00 |    210.00 |      40
+     120 | SLOWINSKI   | PROFESOR   |      100 | 1977-09-01  |   1070.00 |           |      30
+     130 | BRZEZINSKI  | PROFESOR   |      100 | 1968-07-01  |    960.00 |           |      20
+     140 | MORZY       | PROFESOR   |      130 | 1975-09-15  |    830.00 |    105.00 |      20
+     150 | KROLIKOWSKI | ADIUNKT    |      130 | 1977-09-01  |    645.50 |           |      20
+     160 | KOSZLAJDA   | ADIUNKT    |      130 | 1985-03-01  |    590.00 |           |      20
+     170 | JEZIERSKI   | ASYSTENT   |      130 | 1992-10-01  |    439.70 |     80.50 |      20
+     190 | MATYSIAK    | ASYSTENT   |      140 | 1993-09-01  |    371.00 |           |      20
+     180 | MAREK       | SEKRETARKA |      100 | 1985-02-20  |    410.20 |           |      10
+     200 | ZAKRZEWICZ  | STAZYSTA   |      140 | 1994-07-15  |    208.00 |           |      30
+     210 | BIALY       | STAZYSTA   |      130 | 1993-10-15  |    250.00 |    170.60 |      30
+     220 | KONOPKA     | ASYSTENT   |      110 | 1993-10-01  |    480.00 |           |      20
+     230 | HAPKE       | ASYSTENT   |      120 | 1992-09-01  |    480.00 |     90.00 |      30
+     100 | WEGLARZ     | DYREKTOR   |          | 1968-01-01  |    999.00 |    420.50 |      10
+(14 rows)
+
+
+Punkt 3.2.
+
+postgres@RBD1:5433# select * from zespoly where id_zesp=10;
+ id_zesp |     nazwa     |   adres    
+---------+---------------+------------
+      10 | ADMINISTRACJA | PIOTROWO 1
+(1 row)
+
+postgres@RBD1:5433# select * from pracownicy where id_prac=100;
+ id_prac | nazwisko |   etat   | id_szefa | zatrudniony | placa_pod | placa_dod | id_zesp 
+---------+----------+----------+----------+-------------+-----------+-----------+---------
+     100 | WEGLARZ  | DYREKTOR |          | 1968-01-01  |    999.00 |    420.50 |      10
+(1 row)
+
+Punkt 3.19.
+
+RBD1
+begin;
+update pracownicy set placa_pod=666 where id_prac=100;
+
+RBD2
+begin;
+update zespoly set adres="Piotrowo 99" where id_zesp=10;
+
+RBD1
+PREPARE TRANSACTION 'distributed-transaction01-rbd1';
+
+RBD2
+PREPARE TRANSACTION 'distributed-transaction01-rbd2';
+
+kubectl scale sts pgsql-rbd1 --replicas=0
+kubectl scale sts pgsql-rbd2 --replicas=0
+
+kubectl scale sts pgsql-rbd1 --replicas=1
+kubectl scale sts pgsql-rbd2 --replicas=1
+
+Punkt 4.12.
+Dzieki uzyciu statement_timeout nie dochodzi do zakleszczenia i jedna z transakcji moze zakonczyc sie powodzeniem, ale w drugiej transkacji dostajemy error: ERROR: canceling statement due to statement timeout.
+
+5.6
+Nie zawsze mamy dostep do najnowszych danych. Jesli chcemy pracowac z taka tabela musielibysmy caly czas ja odswiezac.
+
+5.20
+SELECT cron.schedule('*/5 * * * *', $$ REFRESH MATERIALIZED VIEW zespoly_replika; $$);
+
+

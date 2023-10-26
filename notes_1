@@ -1,0 +1,61 @@
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo >/dev/null
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+k3d cluster create RBDcluster --servers 1 --agents 2 --image rancher/k3s:v1.22.2-k3s1 --port "5432-5433:5432-5433@loadbalancer"
+
+rbd2
+k3d-rbdcluster-agent-1
+
+sudo yum install -y \
+https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+sudo yum -y install postgresql14-14.0
+
+export PS1='[\u@rbd1 \W]\$ '
+ export PS1='[\u@rbd2 \W]\$ '
+
+\set PROMPT1 '%n@RBD1:%>%# '
+CREATE EXTENSION postgres_fdw;
+
+\i ~/pracownicy.sql
+\i ~/zespoly.sql
+
+CREATE SERVER rbd2
+FOREIGN DATA WRAPPER postgres_fdw
+OPTIONS (host 'pgsql-rbd2-lb', port '5433', dbname 'postgres');
+
+IMPORT FOREIGN SCHEMA public LIMIT TO (zespoly)
+FROM SERVER rbd2 INTO public;
+
+CREATE SERVER rbd1
+FOREIGN DATA WRAPPER postgres_fdw
+OPTIONS (host 'pgsql-rbd1-lb', port '5432', dbname 'postgres');
+
+CREATE USER MAPPING FOR postgres SERVER rbd1
+OPTIONS (user 'postgres', password 'rbd1');
+
+IMPORT FOREIGN SCHEMA public LIMIT TO (pracownicy)
+FROM SERVER rbd1 INTO public;
+
+SELECT * FROM pracownicy;
+SELECT nazwisko, nazwa FROM pracownicy natural join zespoly;
+
+begin;
+update zespoly set adres='PIOTROWO 1' where id_zesp=10;
+update pracownicy set placa_pod=999 where id_prac=100;
+commit;
+
+PREPARE TRANSACTION 'distributed-transaction01-rbd2';
+
+SELECT cron.schedule('*/5 * * * *', $$ REFRESH MATERIALIZED VIEW zespoly_replika; $$);
+
+
+
+
+
