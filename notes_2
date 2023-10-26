@@ -1,0 +1,121 @@
+SELECT create_distributed_table('loggers', 'lo_or_id', colocate_with => 'organizations');
+SELECT create_distributed_table('measurements', 'me_or_id', colocate_with => 'organizations');
+
+select lo_description, me_time, me_temperature from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id) where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'order by me_time;
+
+EXPLAIN select lo_description, me_time, me_temperature from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id) where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'order by me_time;
+
+postgres=# EXPLAIN select lo_description, me_time, me_temperature from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id) where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'order by me_time;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=20610.82..20860.82 rows=100000 width=258)
+   Sort Key: remote_scan.me_time
+   ->  Custom Scan (Citus Adaptive)  (cost=0.00..0.00 rows=100000 width=258)
+         Task Count: 32
+         Tasks Shown: One of 32
+         ->  Task
+               Node: host=pgsql-citus-sts-1.pgsql-rbd-citus port=5432 dbname=postgres
+               ->  Hash Join  (cost=17.75..41.16 rows=86 width=232)
+                     Hash Cond: ((measurements.me_lo_id = loggers.lo_id) AND (measurements.me_or_id = loggers.lo_or_id))
+                     ->  Seq Scan on measurements_102072 measurements  (cost=0.00..22.95 rows=86 width=22)
+                           Filter: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
+                     ->  Hash  (cost=13.10..13.10 rows=310 width=226)
+                           ->  Seq Scan on loggers_102040 loggers  (cost=0.00..13.10 rows=310 width=226)
+(13 rows)
+
+postgres=# EXPLAIN select lo_description, me_time, me_temperature from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id) where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'order by me_time;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=20610.82..20860.82 rows=100000 width=258)
+   Sort Key: remote_scan.me_time
+   ->  Custom Scan (Citus Adaptive)  (cost=0.00..0.00 rows=100000 width=258)
+         Task Count: 32
+         Tasks Shown: One of 32
+         ->  Task
+               Node: host=pgsql-citus-sts-1.pgsql-rbd-citus port=5432 dbname=postgres
+               ->  Hash Join  (cost=22.91..32.65 rows=86 width=232)
+                     Hash Cond: ((measurements.me_lo_id = loggers.lo_id) AND (measurements.me_or_id = loggers.lo_or_id))
+                     ->  Bitmap Heap Scan on measurements_102072 measurements  (cost=5.16..14.45 rows=86 width=22)
+                           Recheck Cond: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
+                           ->  Bitmap Index Scan on me_time_idx_102072  (cost=0.00..5.14 rows=86 width=0)
+                                 Index Cond: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
+                     ->  Hash  (cost=13.10..13.10 rows=310 width=226)
+                           ->  Seq Scan on loggers_102040 loggers  (cost=0.00..13.10 rows=310 width=226)
+(15 rows)
+
+EXPLAIN select lo_description, me_time, me_temperature
+from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id)
+where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'
+and lo_or_id=143
+order by me_time;
+
+ Custom Scan (Citus Adaptive)  (cost=0.00..0.00 rows=0 width=0)
+   Task Count: 1
+   Tasks Shown: All
+   ->  Task
+         Node: host=pgsql-citus-sts-1.pgsql-rbd-citus port=5432 dbname=postgres
+         ->  Sort  (cost=137.38..137.72 rows=135 width=232)
+               Sort Key: measurements.me_time
+               ->  Hash Join  (cost=14.98..132.60 rows=135 width=232)
+                     Hash Cond: (measurements.me_lo_id = loggers.lo_id)
+                     ->  Bitmap Heap Scan on measurements_102082 measurements  (cost=5.45..122.79 rows=105 width=22)
+                           Recheck Cond: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
+                           Filter: (me_or_id = 143)
+                           ->  Bitmap Index Scan on me_time_idx_102082  (cost=0.00..5.43 rows=114 width=0)
+                                 Index Cond: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
+                     ->  Hash  (cost=9.50..9.50 rows=2 width=226)
+                           ->  Bitmap Heap Scan on loggers_102050 loggers  (cost=4.16..9.50 rows=2 width=226)
+                                 Recheck Cond: (lo_or_id = 143)
+                                 ->  Bitmap Index Scan on loggers_pkey_102050  (cost=0.00..4.16 rows=2 width=0)
+                                       Index Cond: (lo_or_id = 143)
+
+
+
+explain
+select lt_name, lo_description, me_time, me_temperature
+from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id)
+join logger_types on(lt_id=lo_lt_id)
+where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'
+and lo_or_id=143
+order by me_time;
+
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (Citus Adaptive)  (cost=0.00..0.00 rows=0 width=0)
+   Task Count: 1
+   Tasks Shown: All
+   ->  Task
+         Node: host=pgsql-citus-sts-1.pgsql-rbd-citus port=5432 dbname=postgres
+         ->  Sort  (cost=153.85..154.19 rows=135 width=290)
+               Sort Key: measurements.me_time
+               ->  Hash Join  (cost=31.33..149.07 rows=135 width=290)
+                     Hash Cond: (measurements.me_lo_id = loggers.lo_id)
+                     ->  Bitmap Heap Scan on measurements_102082 measurements  (cost=5.45..122.79 rows=105 width=22)
+                           Recheck Cond: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
+                           Filter: (me_or_id = 143)
+                           ->  Bitmap Index Scan on me_time_idx_102082  (cost=0.00..5.43 rows=114 width=0)
+                                 Index Cond: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
+                     ->  Hash  (cost=25.86..25.86 rows=2 width=284)
+                           ->  Nested Loop  (cost=4.31..25.86 rows=2 width=284)
+                                 ->  Bitmap Heap Scan on loggers_102050 loggers  (cost=4.16..9.50 rows=2 width=230)
+                                       Recheck Cond: (lo_or_id = 143)
+                                       ->  Bitmap Index Scan on loggers_pkey_102050  (cost=0.00..4.16 rows=2 width=0)
+                                             Index Cond: (lo_or_id = 143)
+                                 ->  Index Scan using logger_types_pkey_102104 on logger_types_102104 logger_types  (cost=0.15..8.17 rows=1 width=62)
+                                       Index Cond: (lt_id = loggers.lo_lt_id)
+
+
+[rbd@rbd pp_rbd]$ kubectl run -it dnsutils \
+> --image gcr.io/kubernetes-e2e-test-images/dnsutils:1.3
+     
+If you don't see a command prompt, try pressing enter.
+/ # 
+/ # nslookup 10.42.0.7
+7.0.42.10.in-addr.arpa	name = 10-42-0-7.pgsql-rbd-citus-lb.default.svc.cluster.local.
+7.0.42.10.in-addr.arpa	name = pgsql-citus-sts-2.pgsql-rbd-citus.default.svc.cluster.local.
+
+SELECT create_distributed_table('examples', 'ex_id', colocate_with => none);
+
+
+
+
