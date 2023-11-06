@@ -171,6 +171,6 @@ rbd-citus-coord-4-0              1/1     Running   0             77s
 
 Zniknal rbd-citus-coord-3-0 i pojawil sie rbd-citus-coord-4-0  
 
-adres: 10.42.1.18
+nowy adres: 10.42.3.11
 
-W tej sytuacji nie stracilismy polaczenia z baza danych oraz adres nie zminil sie, poniewaz awarii ulegla replika, a nie podstawowa baza danych.
+W tej sytuacji nie stracilismy polaczenia z podstawowa baza danych, poniewaz awarii ulegla replika, a nie podstawowa baza danych.
