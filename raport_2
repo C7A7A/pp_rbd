@@ -1,10 +1,10 @@
 2.14
 SELECT create_distributed_table('measurements', 'me_or_id', colocate_with => 'organizations');
 
-2.16 ??  
-Tak, poniewaz na obu wezlach roboczych widzimy, ze powstalo wiele tabel measurments. ALBO NIE, BO MA 2 KLUCZE OBCE??
+2.16
+Tak, ponieważ na obu węzłach roboczych widzimy, że powstało wiele tabel measurements.
 
-3.2 ??
+3.2
 32 zadania
 koszt: 17.75..41.16
 
@@ -14,36 +14,35 @@ Indexes:
     "measurements_pkey_102102" PRIMARY KEY, btree (me_or_id, me_id) 
     "me_time_idx_102102" btree (me_time) <---- NOWY INDEX
 
-3.5 ??
-tak, zostal uzyty index
+3.5
+Tak, został użyty index.
 Bitmap Index Scan on me_time_idx_102072  (cost=0.00..5.14 rows=86 width=0)
                                  Index Cond: ((me_time >= '2017-03-15 08:13:00'::timestamp without time zone) AND (me_time <= '2017-03-15 09:18:00'::timestamp without time zone))
-
-tak, zmniejszyl sie
+Koszt zmienił się.
 nowy koszt: 22.91..32.65
 
 3.6
-jest tylko jeden task, jego koszt sie znacznie zwiekszyl, rozpoczynamy od sortowania, na koncu szukamy konkretnego id
+Zapytanie wykonało się jako 1 task, jego koszt się znacząco zwiększył, rozpoczynamy od sortowania, na końcu szukamy konkretnego id.
 
 4.4
-na obu wezlach 1 tabela.
-zawartosc fragmentow oraz oryginalen tabeli loggers_types jest identyczna.
+Na obu węzłach 1 tabela.
+Zawartość fragmentów oraz oryginalnej tabeli loggers_types jest identyczna.
 
 4.6
-zmiany zostaly przeniesione
+Zmiany zostaly przeniesione do węzłów roboczych.
 
-4.7 ??
+4.7
 1 baza
 
 5.10
-jedna z sesji ma adres ip koordynatora (citus 0), a druga to wezla roboczego (citus 2), ale nie zauwazylem zadnych roznic w funkcjonalnosci podczas modyfikacji danych.
+Jedna z sesji ma adres ip koordynatora (citus 0), a druga to węzeł roboczy (citus 2), ale nie zauważyłem żadnych różnic w funkcjonalności podczas modyfikacji danych.
 
 11.3
-powstala jedynie tabela logger_types_102104
+Powstala jedynie tabela logger_types_102104.
 
 11.4
 create table examples ( example_id bigint not null, description varchar );
 SELECT create_distributed_table('examples', 'example_id', colocate_with => 'none');
 
-we wszystkich 3 bazach danych zostaly umieszczone fragmenty tabeli
+We wszystkich 3 bazach danych zostały umieszczone fragmenty tabeli.
 
