@@ -1,37 +1,176 @@
 2.10
+Pod obslgujacy replike pgsql-citus-sts-3 zostal usuniety. Pomimo to, fragmenty organizations pozostaly w pgsql-citus-sts-3. Fragmenty organizations sa rowniez zreplikowane w pgsql-citus-sts-2, dlatego polecenie zadzialalo.
 
 2.12
+postgres=# SELECT * FROM organizations
+WHERE or_id=1;
+
+WARNING:  connection to the remote node pgsql-citus-sts-2.pgsql-rbd-citus:5432 failed with the following error: could not translate host name "pgsql-citus-sts-2.pgsql-rbd-citus" to address: Temporary failure in name resolution
+ERROR:  connection to the remote node pgsql-citus-sts-3.pgsql-rbd-citus:5432 failed with the following error: could not translate host name "pgsql-citus-sts-3.pgsql-rbd-citus" to address: Temporary failure in name resolution
+
+Po zmniejszeniu replik do 2 i probie odczytania informacji o danych or_id=1 postgres probuje pozyskac informacje z pgsql-citus-sts-2 i pgsql-citus-sts-3, ale te nie sa dostepne. Dane nie zostaly zreplikowane do pgsql-citus-sts-1.
+
 
 2.14
+Polecenie ponownie zadzialalo, poniewaz przywrocilismy do pracy pgsql-citus-sts-2, na ktorym znajduje sie dane o ktore pytalismy.
 
 2.15
+postgres=# UPDATE organizations SET or_type='CLIENT' WHERE or_id=1;
+SELECT * FROM organizations WHERE or_id=1;
+WARNING:  connection to the remote node pgsql-citus-sts-3.pgsql-rbd-citus:5432 failed with the following error: could not translate host name "pgsql-citus-sts-3.pgsql-rbd-citus" to address: Temporary failure in name resolution
+UPDATE 1
+ or_id |    or_name    | or_type 
+-------+---------------+---------
+     1 | Organization1 | CLIENT
+(1 row)
 
-2.16
+Dane zostaly zmodyfikowane na podzie pgsql-citus-sts-2. Nie mamy dostepu do pgsql-citus-sts-3, wiec postgres wyrzucil warning, ktory poinformowal nas, ze dane na pgsql-citus-sts-3 nie zostaly zmodyfikowane.
 
 2.17
+SELECT * FROM organizations                                                             
+WHERE or_id=1;
+ or_id |    or_name    | or_type 
+-------+---------------+---------
+     1 | Organization1 | CLIENT
+(1 row)
+
+Otrzymalismy dane zgodne z pgsql-citus-sts-2.
 
 2.18
+             nodename              |  status  
+-----------------------------------+----------
+ pgsql-citus-sts-2.pgsql-rbd-citus | ACTIVE
+ pgsql-citus-sts-3.pgsql-rbd-citus | INACTIVE
+(2 rows)
 
-2.19
+pgsql-citus-sts-3 ma status "INACTIVE". 
+
+2.20
+postgres=# SELECT nodename, case shardstate when 1 then 'ACTIVE' when 3 then 'INACTIVE' when 4 then
+'TO_DELETE' end as status
+FROM pg_dist_shard_placement
+WHERE shardid=102138;
+             nodename              | status 
+-----------------------------------+--------
+ pgsql-citus-sts-2.pgsql-rbd-citus | ACTIVE
+ pgsql-citus-sts-3.pgsql-rbd-citus | ACTIVE
+(2 rows)
+
+pgsql-citus-sts-3:
+postgres=# SELECT * FROM organizations_102138
+WHERE or_id = 1;
+ or_id |    or_name    | or_type 
+-------+---------------+---------
+     1 | Organization1 | CLIENT
+(1 row)
+
+Tak, udalo sie
 
 3.15
+[rbd@rbd ~]$ kubectl get pods
+NAME                             READY   STATUS    RESTARTS   AGE
+dnsutils                         1/1     Running   0          10d
+svclb-pgsql-rbd-citus-lb-z22zd   1/1     Running   0          2d21h
+svclb-pgsql-rbd-citus-lb-g2266   1/1     Running   0          2d21h
+svclb-pgsql-rbd-citus-lb-qh8ln   1/1     Running   0          2d21h
+svclb-pgsql-rbd-citus-lb-mq4cr   1/1     Running   0          2d21h
+svclb-pgsql-rbd-citus-lb-wp2vw   1/1     Running   0          2d21h
+pgsql-citus-sts-0                1/1     Running   0          2d21h
+pgsql-citus-sts-1                1/1     Running   0          2d21h
+pgsql-citus-sts-2                1/1     Running   0          2d21h
+rbd-citus-coord-1-0              1/1     Running   0          2m33s
+rbd-citus-coord-2-0              1/1     Running   0          2m25s
+psql                             1/1     Running   0          69s
+
+Ostatnio uruchomione zostaly: rbd-citus-coord-1-0, rbd-citus-coord-2-0, psql
 
 3.16
+[rbd@rbd ~]$ kubectl get sts
+NAME                READY   AGE
+pgsql-citus-sts     3/3     2d21h
+rbd-citus-coord-1   1/1     3m39s
+rbd-citus-coord-2   1/1     3m31s
 
-3.17
-
-3.24
+Ostatnio uruchomione pody: rbd-citus-coord-1, rbd-citus-coord-2
 
 3.26
+postgres=# update loggers set lo_description='changed2' where lo_or_id=261;
+ERROR:  writing to worker nodes is not currently allowed
+DETAIL:  the database is read-only
 
-3.29
+Polecenie nie powiodlo sie w replice bazy danych, poniewaz jest ona ustawiona jak baza tylko do odczytu.
 
 3.32
+postgres=# select * from loggers where lo_or_id=261;
+FATAL:  terminating connection due to administrator command
+SSL connection has been closed unexpectedly
+The connection to the server was lost. Attempting reset: Succeeded.
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, bits: 256, compression: off)
+
+Stracilem polaczenie z baza danych z powodu "polecenia administratora", ale postgres nawiazal je na nowo. 
 
 3.33
+postgres=# select * from loggers where lo_or_id=261;
+ lo_id | lo_description | lo_or_id | lo_lt_id 
+-------+----------------+----------+----------
+  2513 | changed        |      261 |        4
+  2715 | changed        |      261 |        4
+(2 rows)
+
+Po odzyskaniu polaczenia postgres normalnie wykonuje polecenie i wyswietla dane.
 
 3.34
+10.42.2.16 -> 10.42.1.18
+
+Adres zmienil sie, poniewaz po wystapieniu awarii podstawowej bazy danych nastapilo automatyczne przelaczenie sie do jednej z czuwajaych baz danych w tryb podstawowej bazy danych.
 
 3.35
+[rbd@rbd ~]$ kubectl get pods
+NAME                             READY   STATUS    RESTARTS      AGE
+dnsutils                         1/1     Running   0             10d
+svclb-pgsql-rbd-citus-lb-z22zd   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-g2266   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-qh8ln   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-mq4cr   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-wp2vw   1/1     Running   0             2d21h
+pgsql-citus-sts-0                1/1     Running   0             2d21h
+pgsql-citus-sts-1                1/1     Running   0             2d21h
+pgsql-citus-sts-2                1/1     Running   0             2d21h
+psql                             1/1     Running   1 (24m ago)   37m
+rbd-citus-coord-2-0              1/1     Running   0             10m
+rbd-citus-coord-3-0              1/1     Running   0             9m6s
+
+Zniknal pod rbd-citus-coord-1-0, a pojawil sie rbd-citus-coord-3-0
+
+[rbd@rbd ~]$ kubectl get sts
+NAME                READY   AGE
+pgsql-citus-sts     3/3     2d21h
+rbd-citus-coord-2   1/1     22m
+rbd-citus-coord-3   1/1     9m14s
+
+Zniknal StatefulSet rbd-citus-coord-1, a pojawil sie rbd-citus-coord-3
 
 3.36
+[rbd@rbd ~]$ kubectl scale sts rbd-citus-coord-3 --replicas 0
+statefulset.apps/rbd-citus-coord-3 scaled
+
+[rbd@rbd ~]$ kubectl get pods
+NAME                             READY   STATUS    RESTARTS      AGE
+dnsutils                         1/1     Running   0             10d
+svclb-pgsql-rbd-citus-lb-z22zd   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-g2266   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-qh8ln   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-mq4cr   1/1     Running   0             2d21h
+svclb-pgsql-rbd-citus-lb-wp2vw   1/1     Running   0             2d21h
+pgsql-citus-sts-0                1/1     Running   0             2d21h
+pgsql-citus-sts-1                1/1     Running   0             2d21h
+pgsql-citus-sts-2                1/1     Running   0             2d21h
+psql                             1/1     Running   1 (31m ago)   44m
+rbd-citus-coord-2-0              1/1     Running   0             16m
+rbd-citus-coord-4-0              1/1     Running   0             77s
+
+Zniknal rbd-citus-coord-3-0 i pojawil sie rbd-citus-coord-4-0  
+
+adres: 10.42.1.18
+
+W tej sytuacji nie stracilismy polaczenia z baza danych oraz adres nie zminil sie, poniewaz awarii ulegla replika, a nie podstawowa baza danych.

@@ -1,1 +1,34 @@
 w sts-3 jest fragment tabeli organizations z id 102138. Ten fragment przechowuje dane na temat organizations z id=1. Zaraz usune sts-3.
+
+SELECT placementid,  shardid, 
+case shardstate when 1 then 'ACTIVE' when 3 then 'INACTIVE' when 4  then 'TO_DELETE' end as status 
+FROM pg_dist_shard JOIN pg_dist_shard_placement USING (shardid) 
+WHERE logicalrelid='organizations'::regclass and nodenamelike 'pgsql-citus-sts-3%'
+ORDER by shardid;
+
+
+SELECT placementid, shardid,
+case shardstate when 1 then 'ACTIVE' when 3 then 'INACTIVE' when 4 then 'TO_DELETE' end as
+status
+FROM pg_dist_shard JOIN pg_dist_shard_placement USING (shardid)
+WHERE logicalrelid='organizations'::regclass and nodename like 'pgsql-citus-sts-3%'
+ORDER by shardid;
+
+curl \
+https://github.com/reactive-tech/kubegres/blob/main/internal/controller/spec/template/yaml/BaseConfigMapTemplate.yaml | \
+sed "s/md5/trust/g" | \
+sed "/reject/d" | \
+sed "/postgres.conf: |/ a \ \ \ \ shared_preload_libraries='citus'" | \
+kubectl apply -f -
+
+
+curl https://github.com/reactive-tech/kubegres/blob/main/internal/controller/spec/template/yaml/BaseConfigMapTemplate.yaml
+
+https://github.com/reactive-tech/kubegres/blob/main/internal/controller/spec/template/yaml/BaseConfigMapTemplate.yaml
+
+https://raw.githubusercontent.com/reactive-tech/kubegres/main/controllers/spec/template/yaml/BaseConfigMapTemplate.yaml 
+
+10.42.2.16 - oryginal
+10.42.1.17 - replika
+
+10.42.1.18 - oryginal2
