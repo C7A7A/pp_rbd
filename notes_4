@@ -1,2 +1,19 @@
-Skonczylem na 2.13
-Poustawialem jakies publikacje(udostepnienie tabel) w publisher-1 i subskrypcje w subscriber-1. 
+ kubectl rollout restart sts pgsql-rbd3
+
+
+CREATE SUBSCRIPTION meas_subscription2 CONNECTION
+'host=pgsql-rbd3-lb port=5434 user=repl password=rbd1repl dbname=postgres'
+PUBLICATION meas_publication2;
+
+
+2023-11-10 11:27:15.753 UTC [50] DETAIL:  Key (or_id)=(50) already exists.
+2023-11-10 11:27:15.756 UTC [1] LOG:  background worker "logical replication worker" (PID 50) exited with exit code 1
+2023-11-10 11:27:15.761 UTC [57] LOG:  logical replication apply worker for subscription "meas_subscription2" has started
+2023-11-10 11:27:15.771 UTC [57] ERROR:  duplicate key value violates unique constraint "organizations_pkey"
+2023-11-10 11:27:15.771 UTC [57] DETAIL:  Key (or_id)=(50) already exists.
+
+
+pg_16418
+
+select pg_replication_origin_advance(pg_16418, 0/15FC380);
+

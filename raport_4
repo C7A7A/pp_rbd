@@ -1,21 +1,136 @@
 2.14
+postgres=# select count(*) as count_rows from organizations;
+ count_rows 
+------------
+        300
+(1 row)
+
+Replikacja powiodla sie.
 
 2.15
+postgres=# alter publication meas_publication add table loggers;
+ALTER PUBLICATION
 
 2.17
+postgres=# select count(*) as count_rows from loggers;
+ count_rows 
+------------
+          0
+(1 row)
+
+Replikacja nie powiodla sie, poniewaz nie odwsizylismy subskrypcji mesa_subscription.
 
 2.18
+postgres=# select count(*) as count_rows from loggers;
+ count_rows 
+------------
+          0
+(1 row)
+
+postgres=# select subname as substription_name, relname as table_name,
+postgres-# case srsubstate
+postgres-# when 'i' then 'initialize'
+postgres-# when 'd' then 'data is being copied'
+postgres-# when 's' then 'synchronized'
+postgres-# when 'r' then 'ready (normal replication)'
+postgres-# end
+postgres-# from pg_subscription_rel r join pg_subscription s on r.srsubid=s.oid
+postgres-# join pg_class c on r.srrelid=c.oid;
+ substription_name |  table_name   |            case            
+-------------------+---------------+----------------------------
+ meas_subscription | organizations | ready (normal replication)
+(1 row)
+
+Nie
 
 2.21
+provider:
+postgres=# delete from loggers where lo_id = 2177;
+DELETE 1
+
+postgres=# update loggers set lo_description='Updated desc' where lo_id=56;
+UPDATE 1
+
+subscriber:
+postgres=# select * from loggers where lo_id=2177;
+ lo_id | lo_description | lo_or_id | lo_lt_id 
+-------+----------------+----------+----------
+(0 rows)
+
+postgres=# select * from loggers where lo_id=56;
+ lo_id | lo_description | lo_or_id | lo_lt_id 
+-------+----------------+----------+----------
+    56 | Updated desc   |       19 |        2
+(1 row)
+
+Dane usuniete/zakutalizowane w provider replikuja sie odpowiednio w bazie subscriber.
 
 2.22
+a.
+[rbd@rbd pp_rbd]$ kubectl scale sts pgsql-rbd2 --replicas 0
+statefulset.apps/pgsql-rbd2 scaled
+
+b.
+postgres=# update loggers set lo_description='Updated desc2' where lo_id=56;
+UPDATE 1
+
+c.
+[rbd@rbd pp_rbd]$ kubectl scale sts pgsql-rbd2 --replicas 1
+statefulset.apps/pgsql-rbd2 scaled
+
+d.
+postgres=# select * from loggers where lo_id=56;
+ lo_id | lo_description | lo_or_id | lo_lt_id 
+-------+----------------+----------+----------
+    56 | Updated desc2  |       19 |        2
+(1 row)
+
+Zmiany zostaly zreplikowane.
 
 2.23
+Parametr wal_size mowi jaki jest minimalny rozmiar plikow WAL, ktore beda przechowywane w folderze pg_wal. Jesli rezerwowy serwer, ktory jest podlaczony do naszego glownego serwera straci polaczenie i bedzie musial pobrac wiecej danych z pg_wal niz przewiduje parametr wal_size to dane nie zreplikuja sie odpowiednio.
 
 3.6
+provider:
+postgres=# insert into organizations values(-40, 'name', 'type');
+
+subscriber:
+postgres=# select * from organizations where or_id=-40;
+ or_id | or_name | or_type 
+-------+---------+---------
+   -40 | name    | type
+(1 row)
+
+Tak, zmiany przepropagowaly sie do baz subscriber-1.
 
 3.8
+postgres=# select * from organizations where or_id=50;
+ or_id |    or_name     | or_type 
+-------+----------------+---------
+    50 | Organization50 | CLIENT
+(1 row)
+
+postgres=# select * from organizations where or_id=-50;
+ or_id | or_name | or_type 
+-------+---------+---------
+(0 rows)
+
+Propagacja zmian nie powiodla sie w obu przypadkach.
 
 3.11
+2023-11-10 11:36:43.603 UTC [179] LOG:  logical replication apply worker for subscription "meas_subscription2" has started
 
 3.12
+postgres=# select * from organizations where or_id=50;             
+ or_id |    or_name     | or_type 
+-------+----------------+---------
+    50 | Organization50 | CLIENT
+(1 row)
+
+postgres=# select * from organizations where or_id=-50;
+ or_id |    or_name     | or_type 
+-------+----------------+---------
+   -50 | Nie Konflitowa | CLIENT
+(1 row)
+
+Dane z id=50 nie zmienily sie poniewaz postgres pozbyl sie konflikowego inserta. Dzieki pozbyciu sie konfliktowego inserta dane z id=-50 zostaly wstawione.
