@@ -1,5 +1,4 @@
-kubectl exec -it pgsql-bdr-sts-0 -- /bin/bash
-
+kubectl exec -it pgsql-bdr2-sts-1 -- /bin/bash
 
 SELECT bdr.bdr_group_join(
 local_node_name := 'bdr1_node',
@@ -8,3 +7,24 @@ node_external_dsn
 join_using_dsn 
 	:= 'port=5432 dbname=postgres host=pgsql-bdr-sts-0.pgsql-rbd-bdr user=postgres password=rbd-bdr'
 );
+
+na czym stanalem:
+
+2.3
+Chcialem dolaczyc do grupy bdr1, ale wyglada na to ze jest jakas nieskonczona petla i caly czas probuje dolaczyc. Usunalem sts, ale problem dalej pozsotaje taki sam XD. 
+
+
+SELECT bdr.bdr_group_create(
+local_node_name := 'bdr0_node',
+node_external_dsn
+:= 'port=5432 dbname=postgres host=pgsql-bdr2-sts-0.pgsql-rbd-bdr user=postgres password=rbd-bdr'
+);
+
+SELECT bdr.bdr_group_join(
+local_node_name := 'bdr1_node',
+node_external_dsn
+:= 'port=5432 dbname=postgres host=pgsql-bdr2-sts-1.pgsql-rbd-bdr user=postgres password=rbd-bdr',
+join_using_dsn
+:= 'port=5432 dbname=postgres host=pgsql-bdr2-sts-0.pgsql-rbd-bdr user=postgres password=rbd-bdr ');
+
+select 'bdr.bdr_create_conflict_handler'::regproc;

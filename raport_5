@@ -1,27 +1,166 @@
 2.7
+postgres=# \dt
+             List of relations
+ Schema |     Name      | Type  |  Owner   
+--------+---------------+-------+----------
+ public | loggers       | table | postgres
+ public | measurements  | table | postgres
+ public | organizations | table | postgres
+(3 rows)
 
 2.11
+postgres=# select * from organizations where or_id=50;
+ or_id |      or_name      | or_type 
+-------+-------------------+---------
+    50 | Replikowana org 1 | CLIENT
+(1 row)
 
 2.13
+postgres=# select * from organizations where or_id=50;
+ or_id |      or_name      | or_type 
+-------+-------------------+---------
+    50 | Replikowana org 2 | CLIENT
+(1 row)
 
 3.7
+postgres=# select * from organizations where or_id = -10;
+ or_id |      or_name      | or_type 
+-------+-------------------+---------
+   -10 | Replikowana org 4 | CLIENT
+(1 row)
 
 3.8
+postgres=# select * from organizations where or_id = -10;
+ or_id |      or_name      | or_type 
+-------+-------------------+---------
+   -10 | Replikowana org 4 | CLIENT
+(1 row)
 
 4.9
+postgres=# select me_temperature from measurements where me_id=203308395;
+ me_temperature 
+----------------
+           24.5
+(1 row)
 
 4.10
+postgres=# select me_temperature from measurements where me_id=203308395;
+ me_temperature 
+----------------
+           24.5
+(1 row)
 
 5.5
+postgres=# select 'bdr.bdr_create_conflict_handler'::regproc;
+             regproc             
+---------------------------------
+ bdr.bdr_create_conflict_handler
+(1 row)
+
+Nie trzeba, poniewaz funkcja zreplikowala sie do bazy bdr1.
 
 5.7
+=== bdr0 ===
+postgres=# select bdr.bdr_apply_pause();
+ bdr_apply_pause 
+-----------------
+ 
+(1 row)
+
+postgres=# begin;
+BEGIN
+postgres=# select me_temperature from measurements where me_id=203308395 for update;
+   me_temperature    
+---------------------
+ 26.0000000000000000
+(1 row)
+
+postgres=# update measurements set me_temperature=me_temperature+1 where me_id=203308395;
+UPDATE 1
+postgres=# commit;
+COMMIT
+postgres=# select bdr.bdr_apply_resume();
+ bdr_apply_resume 
+------------------
+ 
+(1 row)
+
+postgres=# select me_temperature from measurements where me_id=203308395;
+   me_temperature    
+---------------------
+ 27.5000000000000000
+(1 row)
+
+=== bdr1 ===
+postgres=# select bdr.bdr_apply_pause();
+ bdr_apply_pause 
+-----------------
+ 
+(1 row)
+
+postgres=# begin;
+BEGIN
+postgres=# select me_temperature from measurements where me_id=203308395 for update;
+   me_temperature    
+---------------------
+ 26.0000000000000000
+(1 row)
+
+postgres=# update measurements set me_temperature=me_temperature+2 where me_id=203308395;
+UPDATE 1
+postgres=# commit;
+COMMIT
+postgres=# select bdr.bdr_apply_resume();
+ bdr_apply_resume 
+------------------
+ 
+(1 row)
+
+postgres=# select me_temperature from measurements where me_id=203308395 for update;
+   me_temperature    
+---------------------
+ 27.5000000000000000
+(1 row)
+
+Nie trzeba powtarzac krokow w bdr1. Dane odpowiednio sie zreplikowaly w obu bazach.
+
+Rozwiazanie konfliktu polega na wybraniu sredniej wartosci z obu insertow.
 
 6.2
+postgres=# update organizations set or_name='ChangedOnBdr1' where or_id = -10;
+UPDATE 1
+postgres=# select * from organizations where or_id = -10;
+ or_id |    or_name    | or_type 
+-------+---------------+---------
+   -10 | ChangedOnBdr1 | CLIENT
+(1 row)
+
+Tak, udalo sie.
 
 6.3
+Postgres zawiesil sie, probuje w nieskonczonosc wykonac operacje.
 
 6.6
+postgres=# select * from organizations where or_id = -10;
+ or_id |    or_name    | or_type | location 
+-------+---------------+---------+----------
+   -10 | ChangedOnBdr1 | CLIENT  | 
+(1 row)
+
+Tak, zreplikowala sie.
 
 6.7
+postgres=# alter table organizations add column location varchar(50);
+ALTER TABLE
+
+Po zwiekszeniu replik do 2 udalo wykonac sie operacje ALTER.
 
 6.8
+postgres=# select table_name, column_name, data_type from information_schema.columns where table_name = 'organizations';   table_name   | column_name |     data_type     
+---------------+-------------+-------------------
+ organizations | or_id       | integer
+ organizations | or_name     | character varying
+ organizations | or_type     | character varying
+ organizations | location    | character varying
+(4 rows)
+
