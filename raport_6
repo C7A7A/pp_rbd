@@ -1,40 +1,203 @@
 1.9
-
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ora-rbd2
+spec:
+  serviceName: ora-rbd2-service
+  selector:
+    matchLabels:
+      app: ora-rbd2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ora-rbd2
+    spec:
+      containers:
+        - name: ora-rbd2
+          image: container-registry.oracle.com/database/express:latest
+          volumeMounts:
+            - name: ora-rbd2-disk
+              mountPath: /opt/oracle/oradata
+          env:
+            - name: ORACLE_PWD
+              value: rbd2
+  volumeClaimTemplates:
+    - metadata:
+        name: ora-rbd2-disk
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ora-rbd2-lb
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 1522
+    targetPort: 1521
+  selector:
+    app: ora-rbd2
 
 1.10
+kubectl apply -f ora2.yaml
 
+[rbd@rbd ~]$ kubectl get sts --watch
+NAME             READY   AGE
+pgsql-rbd1       1/1     18d
+pgsql-rbd2       1/1     18d
+pgsql-rbd3       1/1     13d
+pgsql-bdr2-sts   2/2     6d23h
+ora-rbd1         1/1     6d22h
+ora-rbd2         1/1     5m50s
+
+kubectl logs ora-rbd2-0 -f
+
+SQL> Disconnected from Oracle Database 21c Express Edition Release 21.0.0.0.0 - Production
+Version 21.3.0.0.0
+The Oracle base remains unchanged with value /opt/oracle
+The Oracle base remains unchanged with value /opt/oracle
+#########################
+DATABASE IS READY TO USE!
+#########################
+The following output is now a tail of the alert.log:
+XEPDB1(3):Completed: ALTER DATABASE DEFAULT TABLESPACE "USERS"
+2023-11-24T11:01:54.730140+00:00
+ALTER PLUGGABLE DATABASE XEPDB1 SAVE STATE
+Completed: ALTER PLUGGABLE DATABASE XEPDB1 SAVE STATE
+2023-11-24T11:01:55.228843+00:00
+ALTER SYSTEM SET control_files='/opt/oracle/oradata/XE/control01.ctl' SCOPE=SPFILE;
+2023-11-24T11:01:55.241935+00:00
+ALTER SYSTEM SET local_listener='' SCOPE=BOTH;
+ALTER PLUGGABLE DATABASE XEPDB1 SAVE STATE
+Completed: ALTER PLUGGABLE DATABASE XEPDB1 SAVE STATE
 
 2.7
+CREATE DATABASE LINK RBD@RBD1
+CONNECT TO rbd IDENTIFIED BY "RBD#7102"
+USING 'rbd1';
 
+SELECT * FROM pracownicy@RBD@RBD1;
+
+CREATE SYNONYM pracownicy FOR pracownicy@RBD@RBD1;
+
+SELECT nazwisko, nazwa FROM pracownicy natural join zespoly;
 
 3.2
+SQL> select * from zespoly where id_zesp=10;
 
+   ID_ZESP NAZWA		ADRES
+---------- -------------------- --------------------
+	10 ADMINISTRACJA	PIOTROWO 1
+
+SQL> select * from pracownicy where id_prac=100;
+
+   ID_PRAC NAZWISKO	   ETAT 	ID_SZEFA ZATRUDNIO  PLACA_POD  PLACA_DOD  ID_ZESP
+---------- --------------- ---------- ---------- --------- ---------- ----------  ----------
+       100 WEGLARZ	   DYREKTOR		 01-JAN-68	  999	   420.5  10
+
+Tak, posiadaja obie zmiany.
 
 4.2
+SQL> select * from zespoly where id_zesp=10;
 
+   ID_ZESP NAZWA		ADRES
+---------- -------------------- --------------------
+	10 ADMINISTRACJA	PIOTROWO 1
+
+SQL> select * from pracownicy where id_prac=100;
+
+   ID_PRAC NAZWISKO	   ETAT 	ID_SZEFA ZATRUDNIO  PLACA_POD  PLACA_DOD
+---------- --------------- ---------- ---------- --------- ---------- ----------
+   ID_ZESP
+----------
+       100 WEGLARZ	   DYREKTOR		 01-JAN-68	  999	   420.5
+	10
+
+Nie posiadaja zadnej ze zmian, poniewaz wywolalismy awarie po fazie "prepare" i przed faktycznym commitem (4 - Crash after prepare (non-commit point site)).
+
+SQL> commit comment 'ORA-2PC-CRASH-TEST-4';
+commit comment 'ORA-2PC-CRASH-TEST-4'
+*
+ERROR at line 1:
+ORA-02054: transaction 10.10.612 in-doubt
+ORA-02059: ORA-2PC-CRASH-TEST-4 in commit comment
 
 4.4
+SQL> select adres from zespoly where id_zesp=10;
 
+ADRES
+--------------------
+PIOTROWO 3
+
+SQL> select placa_pod from pracownicy where id_prac=100;
+
+ PLACA_POD
+----------
+       777
+
+Tak, posiadaja obie zmiany wprowadzanie przez transakcje, poniewaz wywolalismy awarie podczas wykonywania operacji commit z parametrem 6 (Crash commit point site after commit). Oznacza to, ze awaria ma miejce po commicie. 
+
+SQL> commit comment 'ORA-2PC-CRASH-TEST-6';
+commit comment 'ORA-2PC-CRASH-TEST-6'
+*
+ERROR at line 1:
+ORA-02054: transaction 10.9.612 in-doubt
+ORA-02053: transaction 9.6.563 committed, some remote DBs may be in-doubt
+ORA-02059: ORA-2PC-CRASH-TEST-6 in commit comment
+ORA-02063: preceding 2 lines from RBD@RBD2
 
 5.6
-
+Baza rbd2, poniewaz "The role a node plays in a distributed transaction is determined by the commit point strength of the node ("Commit Point Site "). Oznacza to, ze wezel ktory ma wieksza wartosc commit point strength zostanie wezlem zatwierdzania.
 
 5.10
+SQL> select * from zespoly where id_zesp = 10;
 
+   ID_ZESP NAZWA		ADRES
+---------- -------------------- --------------------
+	10 ADMINISTRACJA	PIOTROWO 3
 
 5.11
+SQL> update pracownicy set placa_pod=555 where id_prac=100;
+update pracownicy set placa_pod=555 where id_prac=100
+       *
+ERROR at line 1:
+ORA-01591: lock held by in-doubt distributed transaction 1.1.627
 
+Operacja sie nie powiodla. Baza danych informuje nas, ze zalozona zostala blokada z powodu poprzedniej transakcji, ktora jest w stanie "in-doubt".
 
 5.15
+SQL> select local_tran_id, interface, in_out from dba_2pc_neighbors;
+
+LOCAL_TRAN_ID	       I IN_
+---------------------- - ---
+1.1.627 	       N in		1) N - oznacza, ze wezel zdalny informuje wezel lokalny, ze jest gotowy
+1.1.627 	       C out		2) C - dziecko, na zdalnym koncu polaczenie jest punktem zatwierdzenia i 						   wie czy zatwierdzic czy zakonczyc transakcje
+
 
 
 5.17
-
+Nalezy wycofac zmiany rozproszonej transakcji, poniewaz jest ona w stanie "in-doubt" i nie pozwala na zatwierdzanie kolejnych transakcji.
 
 5.20
+SQL> update pracownicy set placa_pod=333 where id_prac=100;
 
+1 row updated.
+
+SQL> commit;
+
+Commit complete.
+
+Transakcja zostala poprawnie zatwierdzona, poniewaz nie ma juz blokady na transkacji, ktora jest w stanie "in-doubt".
 
 5.21
-
+Nie, nie ma takiej potrzeby, poniewaz problem z transkacja byl po stronie rbd1.
 
 5.22
+Tym razem transakcja zatwierdzila sie, ale nadal jest watpliwa. Nalezy ja wycofac w celu zatwierdzenia kolejnych transakcji.
+

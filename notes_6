@@ -1,0 +1,83 @@
+kubectl logs ora-rbd2-0 -f
+
+cat <<EOT>> /opt/oracle/oradata/dbconfig/XE/tnsnames.ora
+RBD1 =(DESCRIPTION = (ADDRESS_LIST =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = ora-rbd1-lb)(PORT = 1521)))
+  (CONNECT_DATA =(SERVICE_NAME = XEPDB1)))
+RBD2 =(DESCRIPTION = (ADDRESS_LIST =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = ora-rbd2-lb)(PORT = 1522)))
+  (CONNECT_DATA =(SERVICE_NAME = XEPDB1)))
+EOT
+
+kubectl exec -it ora-rbd2-0 -- /bin/bash
+
+create user rbd identified by "RBD#7102"
+quota unlimited on users;
+
+connect rbd/"RBD#7102"@rbd2
+
+@ /opt/oracle/oradata/zespoly.sql
+
+CREATE DATABASE LINK RBD@RBD1
+CONNECT TO rbd IDENTIFIED BY "RBD#7102"
+USING 'rbd1';
+
+SELECT * FROM pracownicy@RBD@RBD1;
+
+CREATE SYNONYM pracownicy FOR pracownicy@RBD@RBD1;
+
+SELECT nazwisko, nazwa FROM pracownicy natural join zespoly;
+
+
+LOCAL_TRAN_ID		GLOBAL_TRAN_ID										STATE
+----------------------  --------------------------------------------------------------------------------	----------------
+1.1.627			XEPDB1.28fa383f.1.1.627									prepared
+
+
+
+LOCAL_TRAN_ID	       I	DATABASE
+---------------------- -	--------------------------------------------------------------------------------
+1.1.627 	       N	
+1.1.627 	       C	RBD@RBD2
+
+
+C is a commit message; N is either a message indicating a prepared state or a request for a read-only commit.
+
+When IN_OUT is OUT, C means that the child at the remote end of the connection is the commit point site and knows whether to commit or terminate. N means that the local node is informing the remote node that it is prepared.
+
+When IN_OUT is IN, C means that the local node or a database at the remote end of an outgoing connection is the commit point site. N means that the remote node is informing the local node that it is prepared. 
+
+rollback force '1.1.627'
+
+
+update pracownicy set placa_pod=6666 where id_prac=100;
+
+kubectl exec -it ora-rbd1-0 -- /bin/bash
+sqlplus system/rbd1@RBD1
+connect rbd/"RBD#7102"@rbd1
+
+====
+rbd1
+update zespoly set adres='PIOTROWO 6' where id_zesp=10;
+update pracownicy set placa_pod=4444 where id_prac=100;
+commit comment 'ORA-2PC-CRASH-TEST-6';
+
+
+rbd2
+select adres from zespoly where id_zesp=10;
+
+
+rbd1
+update pracownicy set placa_pod=5353 where id_prac=100;
+
+
+
+
+
+
+
+
+
+
+
+
