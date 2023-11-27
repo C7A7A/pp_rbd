@@ -1,0 +1,39 @@
+kubectl exec -it ora-rbd2-0 -- /bin/bash
+
+sqlplus rbd/RBD#7102@RBD1
+
+select * from zespoly where id_zesp=10;
+select * from pracownicy where id_prac=100;
+
+select s.sid
+      ,s.serial#
+      ,t.start_time
+from v$transaction t
+inner join v$session s on t.addr = s.taddr;
+
+
+alter system kill session '170, 35284';
+
+create materialized view rep_place
+refresh fast
+next sysdate + 1/(24*60)
+as
+select id_prac, nazwisko, placa_pod, placa_dod, etat
+from pracownicy@rbd@rbd1;
+
+
+select * from rep_place;
+
+exec DBMS_REFRESH.MAKE (name => 'rg_kadry', -
+list => 'rep_etaty, rep_place', -
+next_date => sysdate, -
+interval => 'sysdate + 1/(24*30)', -
+lax => true)
+
+
+update etaty set placa_min=0 where nazwa='PROFESOR';
+update pracownicy set placa_pod=2000 where id_prac=100;
+commit;
+
+select id_prac, placa_pod from rep_place where id_prac=100;
+select nazwa, placa_min from rep_etaty where nazwa='PROFESOR';

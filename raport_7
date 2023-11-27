@@ -1,0 +1,69 @@
+3.6
+SQL> update zespoly set adres='PIOTROWO 77' where id_zesp=10;
+update zespoly set adres='PIOTROWO 77' where id_zesp=10
+*
+ERROR at line 1:
+ORA-02049: timeout: distributed transaction waiting for lock
+ORA-02063: preceding line from RBD@RBD2
+
+Po minucie, w rbd1 otrzymalismy komunikat, ze transakcja czeka na zejscie blokady (distributed_lock_timeout ustawiony jest na 60 sekund). Aby dokonczyc transkacje T1 i T2 nalezy scommitowac pierwsza z nich w celu zdjecia blokady. Niestety, tylko 1 transakcja w obu bazach zakonczy sie sukcesem.
+
+4.1.6
+Przede wszystkim reczenie odswizanie tabeli co okreslony czas moze byc zasobozerne. Dodatkowo pelne odwiezanie materializowanych perspektwy wydaje sie niepotrzebne kiedy modyfikujemy jedynie pojedyncze dane. W takim wypadku wydajnosc procesu pelnego odswiezania moze nie byc wysoka.
+
+4.2.3
+Wydaje mi sie, ze potrzebne jest reczne odswiezenie materializowanej perspektywy, poniewaz dopiero po odwiezeniu otrzymamy informacje o istnieniu dziennika.
+
+4.2.6
+Co ciekawe, po odswiezeniu w trybie przyrostowym zaktualizaowane dane widnieja na samej gorze tabeli mimo wyzszej wartosci id. Przyrostowe odwiezanie materilizowanych perspektyw jak najbardziej wplywa na wydajnosc procesu odswiezania, poniewaz odswiezamy tylko dane, ktore zostaly zmienione.
+
+4.3.6
+Tak, po minucie dane pracownika o id=150 zmienily sie.
+
+4.4.7
+SQL> update etaty set placa_min=0 where nazwa='PROFESOR';
+1 row updated.
+SQL> update pracownicy set placa_pod=2000 where id_prac=100;
+1 row updated.
+SQL> commit;
+
+SQL> select id_prac, placa_pod from rep_place;
+
+   ID_PRAC  PLACA_POD
+---------- ----------
+       110	 1350
+       120	 1070
+       130	  960
+       140	  830
+       160	  590
+       170	439.7
+       190	  371
+       180	410.2
+       200	  208
+       210	  250
+       220	  480
+
+   ID_PRAC  PLACA_POD
+---------- ----------
+       230	  480
+       150	  777
+       100	 2000
+
+14 rows selected.
+
+SQL> select nazwa, placa_min from rep_etaty;
+
+NAZWA	    PLACA_MIN
+---------- ----------
+ADIUNKT 	  510
+ASYSTENT	  300
+STAZYSTA	  150
+SEKRETARKA	  270
+DYREKTOR	 1280
+PROFESOR	    0
+
+
+Po okolo 2 minutach czekania dane z obu perspektyw odswiezyly sie.
+
+
+

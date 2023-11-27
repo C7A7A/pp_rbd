@@ -70,7 +70,8 @@ select adres from zespoly where id_zesp=10;
 rbd1
 update pracownicy set placa_pod=5353 where id_prac=100;
 
-
+ALTER SYSTEM ENABLE DISTRIBUTED RECOVERY;
+connect system/rbd2@XE
 
 
 
