@@ -1,21 +1,79 @@
 3.6
+cqlsh> select * from test.dist_tab;
+NoHostAvailable:
 
 3.7
+cqlsh> insert into test.dist_tab(id, tekst) values (3, 'c');
 
 3.9
+cqlsh> select * from test.dist_tab;
+InvalidRequest: Error from server: code=2200 [Invalid query] message="ANY ConsistencyLevel is only supported for writes"
 
 3.10
+cqlsh> insert into test.dist_tab(id, tekst) values (3, 'c');
 
 3.17
+cqlsh> select * from test.dist_tab;
+
+ id | tekst
+----+-------
+  2 |     b
+  3 |     c
+
+(2 rows)
 
 3.19
+cqlsh> consistency one;
+Consistency level set to ONE.
+cqlsh> select * from test.dist_tab;
+
+ id | tekst
+----+-------
+  2 |     b
+  3 |     c
+
+(2 rows)
 
 4.6
+cqlsh> insert into test2.dist_tab2(id, tekst) values (5, 'f');
 
 4.7
+cqlsh> select * from test2.dist_tab2;
+
+ id | tekst
+----+-------
+  5 |     f
+  4 |     e
+
+(2 rows)
 
 4.14
+cqlsh> select * from test2.dist_tab2;
+
+ id | tekst
+----+-------
+  5 |     f
+  4 |     e
+
+(2 rows)
 
 5.6
+cqlsh> select * from test2.dist_tab2;
+
+ id | tekst
+----+-------
+  5 |     f
+  4 |     e
+
+(2 rows)
 
 6.5
+cqlsh> select * from test2.dist_tab2;
+
+ id | tekst
+----+-------
+  5 |     f
+  4 |     e
+
+(2 rows)
+

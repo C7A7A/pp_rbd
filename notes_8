@@ -1,1 +1,16 @@
 na czym skonczylem: przygotowanie srodowiska i przylaczenie sie do wezlow rbd-cassandra za pomoca narzedzia cqlsh
+
+CREATE KEYSPACE test WITH replication = {'class':'SimpleStrategy', 'replication_factor' : 1};
+
+create table test.dist_tab(
+id int,
+tekst text,
+primary key (id));
+
+62ef74df-ffa7-4c70-af82-b771e985c31d
+
+kubectl exec -it rbd-cassandra-0 -- nodetool removenode 62ef74df-ffa7-4c70-af82-b771e985c31d
+
+91876c1d-6f08-4304-92f4-9182cc883850
+
+kubectl exec -it rbd-cassandra-0 -- nodetool removenode 91876c1d-6f08-4304-92f4-9182cc883850
