@@ -1,26 +1,247 @@
 2.16
+rbd-mongodb:PRIMARY> rs.status().members.forEach( 
+...   function(z){ 
+...     printjson(z.name);
+...     printjson(z.stateStr);
+...   } 
+... );
+"rbd-mongodb-0.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"PRIMARY"
+"rbd-mongodb-1.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+"rbd-mongodb-2.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+
+rbd-mongodb-0 -> PRIMARY
+rbd-mongodb-1 -> SECONDARY
+rbd-mongodb-2 -> SECONDARY
 
 3.2
+rbd-mongodb:SECONDARY> db.pracownicy.find()
+Error: error: {
+	"topologyVersion" : {
+		"processId" : ObjectId("6569c5cfacf8e2c149c25a2f"),
+		"counter" : NumberLong(4)
+	},
+	"operationTime" : Timestamp(1701431588, 1),
+	"ok" : 0,
+	"errmsg" : "not master and slaveOk=false",
+	"code" : 13435,
+	"codeName" : "NotPrimaryNoSecondaryOk",
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1701431588, 1),
+		"signature" : {
+			"hash" : BinData(0,"7cnvzQzRbMsQDqGxL+rQujMwv9M="),
+			"keyId" : NumberLong("7307589590867509252")
+		}
+	}
+}
+
+W bazie typu SECONDARY nie mamy prawa do oczytu
 
 3.6
+rbd-mongodb:SECONDARY> db.pracownicy.insertOne({nazwisko: "Czajka", etat: "Student",placa: 0})
+uncaught exception: WriteCommandError({
+	"topologyVersion" : {
+		"processId" : ObjectId("6569c5cfacf8e2c149c25a2f"),
+		"counter" : NumberLong(4)
+	},
+	"operationTime" : Timestamp(1701431748, 1),
+	"ok" : 0,
+	"errmsg" : "not master",
+	"code" : 10107,
+	"codeName" : "NotWritablePrimary",
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1701431748, 1),
+		"signature" : {
+			"hash" : BinData(0,"mIv8CteBQAOxGs6HYxs50xCEOcc="),
+			"keyId" : NumberLong("7307589590867509252")
+		}
+	}
+}) :
+WriteCommandError({
+	"topologyVersion" : {
+		"processId" : ObjectId("6569c5cfacf8e2c149c25a2f"),
+		"counter" : NumberLong(4)
+	},
+	"operationTime" : Timestamp(1701431748, 1),
+	"ok" : 0,
+	"errmsg" : "not master",
+	"code" : 10107,
+	"codeName" : "NotWritablePrimary",
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1701431748, 1),
+		"signature" : {
+			"hash" : BinData(0,"mIv8CteBQAOxGs6HYxs50xCEOcc="),
+			"keyId" : NumberLong("7307589590867509252")
+		}
+	}
+})
+WriteCommandError@src/mongo/shell/bulk_api.js:417:48
+executeBatch@src/mongo/shell/bulk_api.js:915:23
+Bulk/this.execute@src/mongo/shell/bulk_api.js:1163:21
+DBCollection.prototype.insertOne@src/mongo/shell/crud_api.js:264:9
+
+W bazie typu SECONDARY nie mamy prawa do zapisu ("codeName" : "NotWritablePrimary",)
 
 4.4
+rbd-mongodb:PRIMARY> db.pracownicy.insertOne({nazwisko: "Malińska", etat: "Asystent",placa: 3222})
+{
+	"acknowledged" : true,
+	"insertedId" : ObjectId("6569ca684784350c87ec2290")
+}
 
 4.5
+rbd-mongodb:SECONDARY> db.pracownicy.find()
+{ "_id" : ObjectId("6569c90e4784350c87ec228f"), "nazwisko" : "Kowalski", "etat" : "Stazysta", "placa" : 2222 }
+{ "_id" : ObjectId("6569ca684784350c87ec2290"), "nazwisko" : "Malińska", "etat" : "Asystent", "placa" : 3222 }
+
 
 4.6
+1) 
+0s          Normal    Pulled                         pod/rbd-mongodb-1                                          Container image "docker.io/mongo:4.4.10-focal" already present on machine
+0s          Normal    Created                        pod/rbd-mongodb-1                                          Created container mongod
+0s          Normal    Started                        pod/rbd-mongodb-1                                          Started container mongod
+
+2)
+[rbd@rbd mongodb-kubernetes-operator-0.7.6]$ kubectl exec -it rbd-mongodb-1 --container mongod -- /bin/bash
+groups: cannot find name for group ID 2000
+I have no name!@rbd-mongodb-1:/$ 
+
+3)
+@rbd-mongodb-1:/$ mongo --username rbd-user --password rbd-mongo
+MongoDB shell version v4.4.10
+connecting to: mongodb://127.0.0.1:27017/?compressors=disabled&gssapiServiceName=mongodb
+Implicit session: session { "id" : UUID("0e43b8a4-04d7-4c20-b390-22ec4a80e9cd") }
+MongoDB server version: 4.4.10
+Welcome to the MongoDB shell.
+
+4)
+rbd-mongodb:SECONDARY> db.pracownicy.find()
+{ "_id" : ObjectId("6569c90e4784350c87ec228f"), "nazwisko" : "Kowalski", "etat" : "Stazysta", "placa" : 2222 }
+{ "_id" : ObjectId("6569ca684784350c87ec2290"), "nazwisko" : "Malińska", "etat" : "Asystent", "placa" : 3222 }
 
 4.7
+[rbd@rbd mongodb-kubernetes-operator-0.7.6]$ kubectl exec -it rbd-mongodb-1 --container mongod -- /usr/bin/kill 1
+[rbd@rbd mongodb-kubernetes-operator-0.7.6]$ kubectl exec -it rbd-mongodb-2 --container mongod -- /usr/bin/kill 1
+
 
 4.8
+rbd-mongodb:PRIMARY> db.pracownicy.insertOne({nazwisko: "Nowak", etat: "Dyrektor",placa: 4222})
+uncaught exception: WriteCommandError({
+	"topologyVersion" : {
+		"processId" : ObjectId("6569c5a44d0022607f9ef858"),
+		"counter" : NumberLong(7)
+	},
+	"operationTime" : Timestamp(1701432258, 1),
+	"ok" : 0,
+	"errmsg" : "not master",
+	"code" : 10107,
+	"codeName" : "NotWritablePrimary",
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1701432258, 1),
+		"signature" : {
+			"hash" : BinData(0,"q7y+41/AkBHHHl0IDSkz8bVYU0M="),
+			"keyId" : NumberLong("7307589590867509252")
+		}
+	}
+}) :
+WriteCommandError({
+	"topologyVersion" : {
+		"processId" : ObjectId("6569c5a44d0022607f9ef858"),
+		"counter" : NumberLong(7)
+	},
+	"operationTime" : Timestamp(1701432258, 1),
+	"ok" : 0,
+	"errmsg" : "not master",
+	"code" : 10107,
+	"codeName" : "NotWritablePrimary",
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1701432258, 1),
+		"signature" : {
+			"hash" : BinData(0,"q7y+41/AkBHHHl0IDSkz8bVYU0M="),
+			"keyId" : NumberLong("7307589590867509252")
+		}
+	}
+})
+WriteCommandError@src/mongo/shell/bulk_api.js:417:48
+executeBatch@src/mongo/shell/bulk_api.js:915:23
+Bulk/this.execute@src/mongo/shell/bulk_api.js:1163:21
+DBCollection.prototype.insertOne@src/mongo/shell/crud_api.js:264:9
+@(shell):1:1
+
 
 4.9
+rbd-mongodb:SECONDARY> db.pracownicy.find()
+Error: error: {
+	"topologyVersion" : {
+		"processId" : ObjectId("6569c5a44d0022607f9ef858"),
+		"counter" : NumberLong(7)
+	},
+	"operationTime" : Timestamp(1701432258, 1),
+	"ok" : 0,
+	"errmsg" : "not master and slaveOk=false",
+	"code" : 13435,
+	"codeName" : "NotPrimaryNoSecondaryOk",
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1701432258, 1),
+		"signature" : {
+			"hash" : BinData(0,"q7y+41/AkBHHHl0IDSkz8bVYU0M="),
+			"keyId" : NumberLong("7307589590867509252")
+		}
+	}
+}
 
 4.10
+1)
+        Normal    Pulled                  pod/rbd-mongodb-2                                          Container image "docker.io/mongo:4.4.10-focal" already present on machine
+0s          Normal    Created                 pod/rbd-mongodb-2                                          Created container mongod
+0s          Normal    Started                 pod/rbd-mongodb-2                                          Started container mongod
+61m         Warning   Unhealthy               pod/rbd-cassandra-1                                        Readiness probe failed:
+0s          Normal    Pulled                  pod/rbd-mongodb-1                                          Container image "docker.io/mongo:4.4.10-focal" already present on machine
+0s          Normal    Created                 pod/rbd-mongodb-1                                          Created container mongod
+0s          Normal    Started                 pod/rbd-mongodb-1                                          Started container mongod
+
+2)
+mongodb-1
+rbd-mongodb:SECONDARY> rs.secondaryOk()
+rbd-mongodb:SECONDARY> db.pracownicy.find()
+{ "_id" : ObjectId("6569c90e4784350c87ec228f"), "nazwisko" : "Kowalski", "etat" : "Stazysta", "placa" : 2222 }
+{ "_id" : ObjectId("6569ca684784350c87ec2290"), "nazwisko" : "Malińska", "etat" : "Asystent", "placa" : 3222 }
+
+mongodb-2
+rbd-mongodb:SECONDARY> rs.secondaryOk()
+rbd-mongodb:SECONDARY> db.pracownicy.find()
+{ "_id" : ObjectId("6569c90e4784350c87ec228f"), "nazwisko" : "Kowalski", "etat" : "Stazysta", "placa" : 2222 }
+{ "_id" : ObjectId("6569ca684784350c87ec2290"), "nazwisko" : "Malińska", "etat" : "Asystent", "placa" : 3222 }
 
 4.14
+rbd-mongodb:SECONDARY> rs.status().members.forEach( 
+...   function(z){ 
+...     printjson(z.name);
+...     printjson(z.stateStr);
+...   } 
+... );
+"rbd-mongodb-0.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"(not reachable/healthy)"
+"rbd-mongodb-1.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"PRIMARY"
+"rbd-mongodb-2.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+
+Po awarii jedynej bazy PRIMARY, mongodb-1 zostalo baza PRIMARY.
 
 4.15
+1)
+0s          Normal    Pulled                  pod/rbd-mongodb-0                                          Container image "docker.io/mongo:4.4.10-focal" already present on machine
+0s          Normal    Created                 pod/rbd-mongodb-0                                          Created container mongod
+0s          Normal    Started                 pod/rbd-mongodb-0                                          Started container mongod
+
+2)
+rbd-mongodb:SECONDARY> rs.secondaryOk()
+rbd-mongodb:SECONDARY> db.pracownicy.find()
+{ "_id" : ObjectId("6569c90e4784350c87ec228f"), "nazwisko" : "Kowalski", "etat" : "Stazysta", "placa" : 2222 }
+{ "_id" : ObjectId("6569ca684784350c87ec2290"), "nazwisko" : "Malińska", "etat" : "Asystent", "placa" : 3222 }
 
 5.8
 

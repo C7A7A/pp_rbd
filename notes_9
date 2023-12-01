@@ -1,0 +1,38 @@
+kubectl exec -it rbd-mongodb-1 --container mongod -- /bin/bash
+
+mongo --username rbd-admin --password rbd-mongo
+
+rs.status().members.forEach( 
+  function(z){ 
+    printjson(z.name);
+    printjson(z.stateStr);
+  } 
+);
+
+use admin;
+
+db.createUser(
+    {
+      user: "rbd-user",
+      pwd: "rbd-mongo",
+      roles: [
+         { role: "readWrite", db: "test" }
+      ]
+    }
+);
+
+exit;
+
+mongo --username rbd-user --password rbd-mongo
+
+db.pracownicy.insertOne({nazwisko: "Czajka", etat: "Student",placa: 0})
+
+rs.secondaryOk()
+
+
+co zrobilem:
+- stworzylem powloki mongo (1-3)
+- stworzylem usera z uprawnieniami admina
+- sprawdzilem jak dzialaja prawa odczytu/zapisu w PRIMARY i SECONDARY
+- usunalem rbd-mongodb-1 i sprawdzilem jak wszystko dziala (wszystko dziala git)
+- usunalem rbd-mongodb-1 i rbd-mongodb-2 i sprawdzilem jak wszystrko dziala (nic nie dziala). Po restarcie mongo-1 i mongo-2 wszystko dziala. Te restarty robia sie automatycznie
