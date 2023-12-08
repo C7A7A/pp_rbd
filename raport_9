@@ -244,5 +244,38 @@ rbd-mongodb:SECONDARY> db.pracownicy.find()
 { "_id" : ObjectId("6569ca684784350c87ec2290"), "nazwisko" : "Malińska", "etat" : "Asystent", "placa" : 3222 }
 
 5.8
+po awarii:
+"rbd-mongodb-0.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"PRIMARY"
+"rbd-mongodb-1.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+"rbd-mongodb-2.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+"rbd-mongodb-3.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"(not reachable/healthy)"
+"rbd-mongodb-4.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"(not reachable/healthy)"
+"rbd-mongodb-arb-0.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"ARBITER"
+"rbd-mongodb-arb-1.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"ARBITER"
+
+
+po restarcie rbd-mongo-3 i rbd-mongo-4:
+"rbd-mongodb-0.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"PRIMARY"
+"rbd-mongodb-1.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+"rbd-mongodb-2.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+"rbd-mongodb-3.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+"rbd-mongodb-4.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"SECONDARY"
+"rbd-mongodb-arb-0.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"ARBITER"
+"rbd-mongodb-arb-1.rbd-mongodb-svc.default.svc.cluster.local:27017"
+"ARBITER"
+
 
 

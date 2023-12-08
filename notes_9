@@ -36,3 +36,5 @@ co zrobilem:
 - sprawdzilem jak dzialaja prawa odczytu/zapisu w PRIMARY i SECONDARY
 - usunalem rbd-mongodb-1 i sprawdzilem jak wszystko dziala (wszystko dziala git)
 - usunalem rbd-mongodb-1 i rbd-mongodb-2 i sprawdzilem jak wszystrko dziala (nic nie dziala). Po restarcie mongo-1 i mongo-2 wszystko dziala. Te restarty robia sie automatycznie
+
+ZACZNIJ OD PKT 5!
