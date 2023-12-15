@@ -190,58 +190,12 @@ liczba czesci:  6
 Tak zawiera dodatkowe dane na temat estymowanych rozmiarow danych. Informuje uzytkownika o estymowanej wielkosci danych per fragment, estymowanej liczbie dokumentow per fragment. Dodatkowo mowi o lacznym procencie przecgowywanych danych, dokumentow i srednie wielkosci obiektu.
 
 3.16
-"queryPlan" : {
-							"stage" : "SHARDING_FILTER",
-							"planNodeId" : 2,
-							"inputStage" : {
-								"stage" : "COLLSCAN",
-								"planNodeId" : 1,
-								"filter" : {
-									
-								},
-								"direction" : "forward"
-							}
-						},
-=======================================================================================
-"queryPlan" : {
-							"stage" : "SHARDING_FILTER",
-							"planNodeId" : 3,
-							"inputStage" : {
-								"stage" : "FETCH",
-								"planNodeId" : 2,
-								"inputStage" : {
-									"stage" : "IXSCAN",
-									"planNodeId" : 1,
-									"keyPattern" : {
-										"_id" : 1
-									},
-									"indexName" : "_id_",
-									"isMultiKey" : false,
-									"multiKeyPaths" : {
-										"_id" : [ ]
-									},
-									"isUnique" : true,
-									"isSparse" : false,
-									"isPartial" : false,
-									"indexVersion" : 2,
-									"direction" : "forward",
-									"indexBounds" : {
-										"_id" : [
-											"[30.0, 30.0]"
-										]
-									}
-								}
-							}
-						},
-
-W planie db.loggers.explain().find() odczytujemy tylko 2 fragmenty, a w planie db.organizations.explain().find({_id:30}) odczytyjemy wszystkie 3 fragmenty. Dodatkowo plan db.organizations.explain().find({_id:30}) wykonuje sie tylko na fragmencie, w ktorym zapisana jest organizacja o id=30, a plan db.loggers.explain().find() wykonuje sie na wszystkich fragmentach.
+Polecenie 15 odczytuje wszystkie 3 fragmenty, polcenie 16 odczytuje tylko 1 fragment (shard-b)
 
 3.20
 odczytane fragmenty: 1 plan odczytuje 3 fragmenty, 2 plan tylko 1 fragment (shard-b)
-informacja o odczytanych fragmentach z kolekcji loggers: nie znajduje sie
-czy mozemy domniemywac, ze dokument opisujacy organizacje o id=30 znajduje sie na tym samym wezle fragmentow co dokument rejestratora nalezacego do tej organizacji i tym samym operacje polaczenia system moze wykonac na tylko jednym wezle fragmentow: nie powinnismy tego domniemywac
-minimalna liczba wezlow fragmentow: 1
-maksymalna liczba wezlow fragmentow: 3
+informacja o odczytanych fragmentach z kolekcji loggers: brak
+czy mozemy domniemywac, ze dokument opisujacy organizacje o id=30 znajduje sie na tym samym wezle fragmentow co dokument rejestratora nalezacego do tej organizacji i tym samym operacje polaczenia system moze wykonac na tylko jednym wezle fragmentow: tak, możemy domniemywać, że dane są na tym samym węźle
 
 3.22
 minimalna: 1
