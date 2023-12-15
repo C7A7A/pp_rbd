@@ -1,0 +1,536 @@
+
+www.cs.put.poznan.pl/jjezierski/RBDv2/helm-v3.7.2-linux-amd64.tar.gz
+
+helm install mongo-configsvr ~/mongo-shrd \
+  --set clusterRole=configsvr \
+  --set replicas=1 \
+  --set port=27019 \
+  --set replSetName=configsvr
+
+
+helm install mongo-shard-c ~/mongo-shrd \
+--set clusterRole=shardsvr \
+--set replicas=1 \
+--set port=27018 \
+--set replSetName=shard-c
+
+helm install mongo-mongos ~/mongo-shrd \
+--set clusterRole=mongos \
+--set replicas=1 \
+--set port=27017 \
+--set replSetName=mongos \
+--set configDB='configsvr/mongo-configsvr-0.mongo-configsvr:27019'
+
+kubectl exec -it mongo-shard-b-0 -- /bin/bash
+
+mongo 127.0.0.1:27018
+
+rs.initiate(
+ {
+  _id : "shard-b",
+  members: [
+    { _id : 0, host : "mongo-shard-b-0.mongo-shard-b:27018" }
+  ]
+ }
+)
+
+mongoimport --db test --collection loggers \
+ --file /data/loggers-json/loggers.json
+
+mongoimport --db test --collection measurements \
+ --file /data/loggers-json/measurements.json
+
+mongoimport --db test --collection organizations \
+ --file /data/loggers-json/organizations.json
+
+"queryPlan" : {
+							"stage" : "SHARDING_FILTER",
+							"planNodeId" : 2,
+							"inputStage" : {
+								"stage" : "COLLSCAN",
+								"planNodeId" : 1,
+								"filter" : {
+									
+								},
+								"direction" : "forward"
+							}
+						},
+=====================================================================
+"queryPlan" : {
+							"stage" : "SHARDING_FILTER",
+							"planNodeId" : 3,
+							"inputStage" : {
+								"stage" : "FETCH",
+								"planNodeId" : 2,
+								"inputStage" : {
+									"stage" : "IXSCAN",
+									"planNodeId" : 1,
+									"keyPattern" : {
+										"_id" : 1
+									},
+									"indexName" : "_id_",
+									"isMultiKey" : false,
+									"multiKeyPaths" : {
+										"_id" : [ ]
+									},
+									"isUnique" : true,
+									"isSparse" : false,
+									"isPartial" : false,
+									"indexVersion" : 2,
+									"direction" : "forward",
+									"indexBounds" : {
+										"_id" : [
+											"[30.0, 30.0]"
+										]
+									}
+								}
+							}
+						},
+
+
+
+db.organizations.explain().aggregate([
+   {
+     $lookup:
+       {
+         from: "loggers",
+         localField: "_id",
+         foreignField: "lo_or_id",
+         as: "loggers-of-org"
+       }
+  }
+])
+
+db.organizations.explain().aggregate([
+  {$match: {    
+    _id: 30
+     }    
+  },
+   {
+
+     $lookup:
+       {
+         from: "loggers",
+         localField: "_id",
+         foreignField: "lo_or_id",
+         as: "loggers-of-org"
+       }
+
+  }
+])
+
+
+
+db.loggers.explain({executionStats:"executionStats"}).aggregate([
+...   {$match: {
+...     lo_or_id: 73
+...      }
+...   },
+...    {
+...      $lookup:
+...        {
+...          from: "logger_types",
+...          localField: "lo_lt_id",
+...          foreignField: "_id",
+...          as: "type-of-loggers"
+...        }
+...   }
+... ])
+{
+	"serverInfo" : {
+		"host" : "mongo-mongos-0",
+		"port" : 27017,
+		"version" : "5.2.0-rc4",
+		"gitVersion" : "53b4b21bcf83ffc14156478293c90bfeab3b10a5"
+	},
+	"serverParameters" : {
+		"internalQueryFacetBufferSizeBytes" : 104857600,
+		"internalQueryFacetMaxOutputDocSizeBytes" : 104857600,
+		"internalLookupStageIntermediateDocumentMaxSizeBytes" : 104857600,
+		"internalDocumentSourceGroupMaxMemoryBytes" : 104857600,
+		"internalQueryMaxBlockingSortMemoryUsageBytes" : 104857600,
+		"internalQueryProhibitBlockingMergeOnMongoS" : 0,
+		"internalQueryMaxAddToSetBytes" : 104857600,
+		"internalDocumentSourceSetWindowFieldsMaxMemoryBytes" : 104857600
+	},
+	"mergeType" : "primaryShard",
+	"splitPipeline" : {
+		"shardsPart" : [
+			{
+				"$match" : {
+					"lo_or_id" : {
+						"$eq" : 73
+					}
+				}
+			}
+		],
+		"mergerPart" : [
+			{
+				"$lookup" : {
+					"from" : "logger_types",
+					"as" : "type-of-loggers",
+					"localField" : "lo_lt_id",
+					"foreignField" : "_id"
+				}
+			}
+		]
+	},
+	"shards" : {
+		"shard-a" : {
+			"host" : "mongo-shard-a-0.mongo-shard-a:27018",
+			"queryPlanner" : {
+				"namespace" : "test.loggers",
+				"indexFilterSet" : false,
+				"parsedQuery" : {
+					"lo_or_id" : {
+						"$eq" : 73
+					}
+				},
+				"optimizedPipeline" : true,
+				"maxIndexedOrSolutionsReached" : false,
+				"maxIndexedAndSolutionsReached" : false,
+				"maxScansToExplodeReached" : false,
+				"winningPlan" : {
+					"queryPlan" : {
+						"stage" : "FETCH",
+						"planNodeId" : 2,
+						"filter" : {
+							"lo_or_id" : {
+								"$eq" : 73
+							}
+						},
+						"inputStage" : {
+							"stage" : "IXSCAN",
+							"planNodeId" : 1,
+							"keyPattern" : {
+								"lo_or_id" : "hashed"
+							},
+							"indexName" : "lo_or_id_hashed",
+							"isMultiKey" : false,
+							"isUnique" : false,
+							"isSparse" : false,
+							"isPartial" : false,
+							"indexVersion" : 2,
+							"direction" : "forward",
+							"indexBounds" : {
+								"lo_or_id" : [
+									"[-4786010342972378287, -4786010342972378287]"
+								]
+							}
+						}
+					},
+					"slotBasedPlan" : {
+						"slots" : "$$RESULT=s13 $$RID=s14 env: { s2 = Nothing (SEARCH_META), s1 = TimeZoneDatabase(Etc/GMT-2...Asia/Chungking) (timeZoneDB), s4 = 1702642755321 (NOW), s3 = Timestamp(1702642747, 1) (CLUSTER_TIME) }",
+						"stages" : "[2] filter {fillEmpty (s17, false)} \n[2] traverse s17 s16 s15 [s14, s13] {s17 || s16} {s17} \nfrom \n    [2] project [s15 = getField (s13, \"lo_or_id\")] \n    [2] nlj [] [s9, s5, s6, s7, s8] \n        left \n            [1] nlj [s6, s8] [s10, s11] \n                left \n                    [1] project [s6 = \"lo_or_id_hashed\", s8 = {\"lo_or_id\" : \"hashed\"}, s10 = KS(207B2959E69F9266A10104), s11 = KS(207B2959E69F9266A1FE04)] \n                    [1] limit 1 \n                    [1] coscan \n                right \n                    [1] project [s5 = s12] \n                    [1] ixseek s10 s11 s7 s9 s12 [] @\"a6fff766-9ca6-49bf-9f4a-707a1b2e02fa\" @\"lo_or_id_hashed\" true \n                \n            \n        right \n            [2] limit 1 \n            [2] seek s9 s13 s14 s5 s6 s7 s8 [] @\"a6fff766-9ca6-49bf-9f4a-707a1b2e02fa\" true false \n        \n    \nin \n    [2] project [s16 = fillEmpty (s15 == 73, false)] \n    [2] limit 1 \n    [2] coscan \n"
+					}
+				},
+				"rejectedPlans" : [ ]
+			},
+			"executionStats" : {
+				"executionSuccess" : true,
+				"nReturned" : 1,
+				"executionTimeMillis" : 1,
+				"totalKeysExamined" : 1,
+				"totalDocsExamined" : 1,
+				"executionStages" : {
+					"stage" : "filter",
+					"planNodeId" : 2,
+					"nReturned" : 1,
+					"executionTimeMillisEstimate" : 0,
+					"opens" : 1,
+					"closes" : 1,
+					"saveState" : 0,
+					"restoreState" : 0,
+					"isEOF" : 1,
+					"numTested" : 1,
+					"filter" : "fillEmpty (s17, false) ",
+					"inputStage" : {
+						"stage" : "traverse",
+						"planNodeId" : 2,
+						"nReturned" : 1,
+						"executionTimeMillisEstimate" : 0,
+						"opens" : 1,
+						"closes" : 1,
+						"saveState" : 0,
+						"restoreState" : 0,
+						"isEOF" : 1,
+						"innerOpens" : 0,
+						"innerCloses" : 0,
+						"inputSlot" : 15,
+						"outputSlot" : 17,
+						"outputSlotInner" : 16,
+						"correlatedSlots" : [
+							NumberLong(14),
+							NumberLong(13)
+						],
+						"nestedArraysDepth" : 1,
+						"fold" : "s17 || s16 ",
+						"final" : "s17 ",
+						"outerStage" : {
+							"stage" : "project",
+							"planNodeId" : 2,
+							"nReturned" : 1,
+							"executionTimeMillisEstimate" : 0,
+							"opens" : 1,
+							"closes" : 1,
+							"saveState" : 0,
+							"restoreState" : 0,
+							"isEOF" : 1,
+							"projections" : {
+								"15" : "getField (s13, \"lo_or_id\") "
+							},
+							"inputStage" : {
+								"stage" : "nlj",
+								"planNodeId" : 2,
+								"nReturned" : 1,
+								"executionTimeMillisEstimate" : 0,
+								"opens" : 1,
+								"closes" : 1,
+								"saveState" : 0,
+								"restoreState" : 0,
+								"isEOF" : 1,
+								"innerOpens" : 1,
+								"innerCloses" : 1,
+								"outerProjects" : [ ],
+								"outerCorrelated" : [
+									NumberLong(9),
+									NumberLong(5),
+									NumberLong(6),
+									NumberLong(7),
+									NumberLong(8)
+								],
+								"outerStage" : {
+									"stage" : "nlj",
+									"planNodeId" : 1,
+									"nReturned" : 1,
+									"executionTimeMillisEstimate" : 0,
+									"opens" : 1,
+									"closes" : 1,
+									"saveState" : 0,
+									"restoreState" : 0,
+									"isEOF" : 1,
+									"innerOpens" : 1,
+									"innerCloses" : 1,
+									"outerProjects" : [
+										NumberLong(6),
+										NumberLong(8)
+									],
+									"outerCorrelated" : [
+										NumberLong(10),
+										NumberLong(11)
+									],
+									"outerStage" : {
+										"stage" : "project",
+										"planNodeId" : 1,
+										"nReturned" : 1,
+										"executionTimeMillisEstimate" : 0,
+										"opens" : 1,
+										"closes" : 1,
+										"saveState" : 0,
+										"restoreState" : 0,
+										"isEOF" : 1,
+										"projections" : {
+											"6" : "\"lo_or_id_hashed\" ",
+											"8" : "{\"lo_or_id\" : \"hashed\"} ",
+											"10" : "KS(207B2959E69F9266A10104) ",
+											"11" : "KS(207B2959E69F9266A1FE04) "
+										},
+										"inputStage" : {
+											"stage" : "limit",
+											"planNodeId" : 1,
+											"nReturned" : 1,
+											"executionTimeMillisEstimate" : 0,
+											"opens" : 1,
+											"closes" : 1,
+											"saveState" : 0,
+											"restoreState" : 0,
+											"isEOF" : 1,
+											"limit" : 1,
+											"inputStage" : {
+												"stage" : "coscan",
+												"planNodeId" : 1,
+												"nReturned" : 1,
+												"executionTimeMillisEstimate" : 0,
+												"opens" : 1,
+												"closes" : 1,
+												"saveState" : 0,
+												"restoreState" : 0,
+												"isEOF" : 0
+											}
+										}
+									},
+									"innerStage" : {
+										"stage" : "project",
+										"planNodeId" : 1,
+										"nReturned" : 1,
+										"executionTimeMillisEstimate" : 0,
+										"opens" : 1,
+										"closes" : 1,
+										"saveState" : 0,
+										"restoreState" : 0,
+										"isEOF" : 1,
+										"projections" : {
+											"5" : "s12 "
+										},
+										"inputStage" : {
+											"stage" : "ixseek",
+											"planNodeId" : 1,
+											"nReturned" : 1,
+											"executionTimeMillisEstimate" : 0,
+											"opens" : 1,
+											"closes" : 1,
+											"saveState" : 0,
+											"restoreState" : 0,
+											"isEOF" : 1,
+											"indexName" : "lo_or_id_hashed",
+											"keysExamined" : 1,
+											"seeks" : 1,
+											"numReads" : 2,
+											"recordSlot" : 7,
+											"recordIdSlot" : 9,
+											"snapshotIdSlot" : 12,
+											"seekKeySlotLow" : 10,
+											"seekKeySlotHigh" : 11,
+											"outputSlots" : [ ],
+											"indexKeysToInclude" : "00000000000000000000000000000000"
+										}
+									}
+								},
+								"innerStage" : {
+									"stage" : "limit",
+									"planNodeId" : 2,
+									"nReturned" : 1,
+									"executionTimeMillisEstimate" : 0,
+									"opens" : 1,
+									"closes" : 1,
+									"saveState" : 0,
+									"restoreState" : 0,
+									"isEOF" : 1,
+									"limit" : 1,
+									"inputStage" : {
+										"stage" : "seek",
+										"planNodeId" : 2,
+										"nReturned" : 1,
+										"executionTimeMillisEstimate" : 0,
+										"opens" : 1,
+										"closes" : 1,
+										"saveState" : 0,
+										"restoreState" : 0,
+										"isEOF" : 0,
+										"numReads" : 1,
+										"recordSlot" : 13,
+										"recordIdSlot" : 14,
+										"seekKeySlot" : 9,
+										"snapshotIdSlot" : 5,
+										"indexIdSlot" : 6,
+										"indexKeySlot" : 7,
+										"indexKeyPatternSlot" : 8,
+										"fields" : [ ],
+										"outputSlots" : [ ]
+									}
+								}
+							}
+						},
+						"innerStage" : {
+							"stage" : "project",
+							"planNodeId" : 2,
+							"nReturned" : 1,
+							"executionTimeMillisEstimate" : 0,
+							"opens" : 1,
+							"closes" : 1,
+							"saveState" : 0,
+							"restoreState" : 0,
+							"isEOF" : 0,
+							"projections" : {
+								"16" : "fillEmpty (s15 == 73, false) "
+							},
+							"inputStage" : {
+								"stage" : "limit",
+								"planNodeId" : 2,
+								"nReturned" : 1,
+								"executionTimeMillisEstimate" : 0,
+								"opens" : 1,
+								"closes" : 1,
+								"saveState" : 0,
+								"restoreState" : 0,
+								"isEOF" : 0,
+								"limit" : 1,
+								"inputStage" : {
+									"stage" : "coscan",
+									"planNodeId" : 2,
+									"nReturned" : 1,
+									"executionTimeMillisEstimate" : 0,
+									"opens" : 1,
+									"closes" : 1,
+									"saveState" : 0,
+									"restoreState" : 0,
+									"isEOF" : 0
+								}
+							}
+						}
+					}
+				},
+				"allPlansExecution" : [ ]
+			}
+		}
+	},
+	"command" : {
+		"aggregate" : "loggers",
+		"pipeline" : [
+			{
+				"$match" : {
+					"lo_or_id" : 73
+				}
+			},
+			{
+				"$lookup" : {
+					"from" : "logger_types",
+					"localField" : "lo_lt_id",
+					"foreignField" : "_id",
+					"as" : "type-of-loggers"
+				}
+			}
+		],
+		"cursor" : {
+			
+		}
+	},
+	"ok" : 1,
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1702642747, 1),
+		"signature" : {
+			"hash" : BinData(0,"AAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+			"keyId" : NumberLong(0)
+		}
+	},
+	"operationTime" : Timestamp(1702642745, 2)
+}
+1.
+helm install mongo-shard-d ~/mongo-shrd \
+--set clusterRole=shardsvr \
+--set replicas=1 \
+--set port=27018 \
+--set replSetName=shard-d
+2.
+kubectl exec -it mongo-shard-d-0 -- /bin/bash
+
+mongo 127.0.0.1:27018
+
+rs.initiate(
+ {
+  _id : "shard-d",
+  members: [
+    { _id : 0, host : "mongo-shard-d-0.mongo-shard-d:27018" }
+  ]
+ }
+)
+3.
+kubectl exec -it mongo-mongos-0 -- /bin/bash
+
+mongo
+
+sh.addShard( "shard-d/mongo-shard-d-0.mongo-shard-d:27018")
+
+
+
+

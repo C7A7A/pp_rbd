@@ -1,27 +1,296 @@
 2.8
+[rbd@rbd ~]$ helm template ~/mongo-shrd \
+>   --set clusterRole=configsvr \
+>   --set replicas=1 \
+>   --set port=27019 \
+>   --set replSetName=configsvr
+---
+# Source: mongo-shrd/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configsvr-configmap
+data:
+  mongod.conf: |-
+    net:
+      bindIp: 0.0.0.0
+    sharding:
+      clusterRole: configsvr
+    replication:
+      replSetName: configsvr
+    storage:
+      dbPath: /data
+---
+# Source: mongo-shrd/templates/manifests.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-configsvr
+  labels:
+    name: mongo-configsvr
+spec:
+  ports:
+    - port: 27019
+      targetPort: 27019
+  clusterIP: None
+  selector:
+    role: mongo-configsvr
+---
+# Source: mongo-shrd/templates/manifests.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo-configsvr
+spec:
+  selector:
+    matchLabels:
+      role: mongo-configsvr
+  serviceName: mongo-configsvr
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        role: mongo-configsvr
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: mongo-configsvr
+        image: rbdput/mongodb:5.2.0-rc4
+        command:
+          - /usr/local/bin/docker-entrypoint.sh
+          - --config
+          - /etc/config/mongod.conf
+        ports:
+          - containerPort: 27019
+        volumeMounts:
+          - name: mongo-persistent-storage
+            mountPath: /data
+          - name: config-volume
+            mountPath: /etc/config
+      volumes:
+        - name: config-volume
+          configMap:
+            name:  configsvr-configmap
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-persistent-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 100Mi
+
+Wygenerowano 2 manifesty
 
 2.13
+[rbd@rbd ~]$ helm install mongo-shard-b ~/mongo-shrd \
+> --set clusterRole=shardsvr \
+> --set replicas=1 \
+> --set port=27018 \
+> --set replSetName=shard-b
+NAME: mongo-shard-b
+LAST DEPLOYED: Fri Dec 15 12:28:49 2023
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+[rbd@rbd ~]$ helm install mongo-shard-c ~/mongo-shrd \
+> --set clusterRole=shardsvr \
+> --set replicas=1 \
+> --set port=27018 \
+> --set replSetName=shard-c
+NAME: mongo-shard-c
+LAST DEPLOYED: Fri Dec 15 12:29:01 2023
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+[rbd@rbd ~]$ helm ls --all
+NAME           	NAMESPACE	REVISION	UPDATED                                	STATUS  	CHART           	APP VERSION
+mongo-configsvr	default  	1       	2023-12-15 12:22:37.833490197 +0100 CET	deployed	mongo-shrd-1.0.0	1.0.0      
+mongo-shard-a  	default  	1       	2023-12-15 12:27:47.063421581 +0100 CET	deployed	mongo-shrd-1.0.0	1.0.0      
+mongo-shard-b  	default  	1       	2023-12-15 12:28:49.813438455 +0100 CET	deployed	mongo-shrd-1.0.0	1.0.0      
+mongo-shard-c  	default  	1       	2023-12-15 12:29:01.641257407 +0100 CET	deployed	mongo-shrd-1.0.0	1.0.0      
+[rbd@rbd ~]$ kubectl get sts --watch
+NAME              READY   AGE
+pgsql-rbd1        1/1     39d
+pgsql-rbd2        1/1     39d
+pgsql-rbd3        1/1     35d
+pgsql-bdr2-sts    2/2     28d
+ora-rbd1          1/1     27d
+ora-rbd2          1/1     21d
+rbd-cassandra     2/2     18d
+mongo-configsvr   1/1     6m35s
+mongo-shard-a     1/1     85s
+mongo-shard-b     1/1     23s
+mongo-shard-c     1/1     11s
+
 
 2.16
+b:
+kubectl exec -it mongo-shard-b-0 -- /bin/bash
+
+mongo 127.0.0.1:27018
+
+rs.initiate(
+ {
+  _id : "shard-b",
+  members: [
+    { _id : 0, host : "mongo-shard-b-0.mongo-shard-b:27018" }
+  ]
+ }
+)
+
+c:
+kubectl exec -it mongo-shard-c-0 -- /bin/bash
+
+mongo 127.0.0.1:27018
+
+rs.initiate(
+ {
+  _id : "shard-c",
+  members: [
+    { _id : 0, host : "mongo-shard-c-0.mongo-shard-c:27018" }
+  ]
+ }
+)
 
 3.10
+root@mongo-mongos-0:/# mongoimport --db test --collection logger_types \
+>  --file /data/loggers-json/logger_types.json
+2023-12-15T11:39:39.519+0000	connected to: mongodb://localhost/
+2023-12-15T11:39:39.546+0000	7 document(s) imported successfully. 0 document(s) failed to import.
+root@mongo-mongos-0:/# mongoimport --db test --collection loggers \
+>  --file /data/loggers-json/loggers.json
+2023-12-15T11:40:53.983+0000	connected to: mongodb://localhost/
+2023-12-15T11:40:54.085+0000	2597 document(s) imported successfully. 0 document(s) failed to import.
+root@mongo-mongos-0:/# mongoimport --db test --collection measurements \
+>  --file /data/loggers-json/measurements.json
+2023-12-15T11:41:20.518+0000	connected to: mongodb://localhost/
+2023-12-15T11:41:23.519+0000	[####################....] test.measurements	12.4MB/14.8MB (84.0%)
+2023-12-15T11:41:24.023+0000	[########################] test.measurements	14.8MB/14.8MB (100.0%)
+2023-12-15T11:41:24.023+0000	122747 document(s) imported successfully. 0 document(s) failed to import.
+root@mongo-mongos-0:/# mongoimport --db test --collection organizations \
+>  --file /data/loggers-json/organizations.json
+2023-12-15T11:42:18.314+0000	connected to: mongodb://localhost/
+2023-12-15T11:42:18.362+0000	300 document(s) imported successfully. 0 document(s) failed to import.
 
 3.12
+wezel podstawowy: shard-b ("_id" : "test",  "primary" : "shard-b")
+liczba fragmentow: 3
+liczba czesci:  6
+ 			{ "lo_or_id" : { "$minKey" : 1 } } -->> { "lo_or_id" : NumberLong("-6148914691236517204") } on : shard-a Timestamp(1, 0) 
+                        { "lo_or_id" : NumberLong("-6148914691236517204") } -->> { "lo_or_id" : NumberLong("-3074457345618258602") } on : shard-a Timestamp(1, 1) 
+                        { "lo_or_id" : NumberLong("-3074457345618258602") } -->> { "lo_or_id" : NumberLong(0) } on : shard-b Timestamp(1, 2) 
+                        { "lo_or_id" : NumberLong(0) } -->> { "lo_or_id" : NumberLong("3074457345618258602") } on : shard-b Timestamp(1, 3) 
+                        { "lo_or_id" : NumberLong("3074457345618258602") } -->> { "lo_or_id" : NumberLong("6148914691236517204") } on : shard-c Timestamp(1, 4) 
+                        { "lo_or_id" : NumberLong("6148914691236517204") } -->> { "lo_or_id" : { "$maxKey" : 1 } } on : shard-c Timestamp(1, 5) 
 
 3.13
+Tak zawiera dodatkowe dane na temat estymowanych rozmiarow danych. Informuje uzytkownika o estymowanej wielkosci danych per fragment, estymowanej liczbie dokumentow per fragment. Dodatkowo mowi o lacznym procencie przecgowywanych danych, dokumentow i srednie wielkosci obiektu.
 
 3.16
+"queryPlan" : {
+							"stage" : "SHARDING_FILTER",
+							"planNodeId" : 2,
+							"inputStage" : {
+								"stage" : "COLLSCAN",
+								"planNodeId" : 1,
+								"filter" : {
+									
+								},
+								"direction" : "forward"
+							}
+						},
+=======================================================================================
+"queryPlan" : {
+							"stage" : "SHARDING_FILTER",
+							"planNodeId" : 3,
+							"inputStage" : {
+								"stage" : "FETCH",
+								"planNodeId" : 2,
+								"inputStage" : {
+									"stage" : "IXSCAN",
+									"planNodeId" : 1,
+									"keyPattern" : {
+										"_id" : 1
+									},
+									"indexName" : "_id_",
+									"isMultiKey" : false,
+									"multiKeyPaths" : {
+										"_id" : [ ]
+									},
+									"isUnique" : true,
+									"isSparse" : false,
+									"isPartial" : false,
+									"indexVersion" : 2,
+									"direction" : "forward",
+									"indexBounds" : {
+										"_id" : [
+											"[30.0, 30.0]"
+										]
+									}
+								}
+							}
+						},
+
+W planie db.loggers.explain().find() odczytujemy tylko 2 fragmenty, a w planie db.organizations.explain().find({_id:30}) odczytyjemy wszystkie 3 fragmenty. Dodatkowo plan db.organizations.explain().find({_id:30}) wykonuje sie tylko na fragmencie, w ktorym zapisana jest organizacja o id=30, a plan db.loggers.explain().find() wykonuje sie na wszystkich fragmentach.
 
 3.20
+odczytane fragmenty: 1 plan odczytuje 3 fragmenty, 2 plan tylko 1 fragment (shard-b)
+informacja o odczytanych fragmentach z kolekcji loggers: nie znajduje sie
+czy mozemy domniemywac, ze dokument opisujacy organizacje o id=30 znajduje sie na tym samym wezle fragmentow co dokument rejestratora nalezacego do tej organizacji i tym samym operacje polaczenia system moze wykonac na tylko jednym wezle fragmentow: nie powinnismy tego domniemywac
+minimalna liczba wezlow fragmentow: 1
+maksymalna liczba wezlow fragmentow: 3
 
 3.22
+minimalna: 1
+maksymalna: 3
 
 4.1
+helm install mongo-shard-d ~/mongo-shrd \
+--set clusterRole=shardsvr \
+--set replicas=1 \
+--set port=27018 \
+--set replSetName=shard-d
 
 4.2
+kubectl exec -it mongo-shard-d-0 -- /bin/bash
+
+mongo 127.0.0.1:27018
+
+rs.initiate(
+ {
+  _id : "shard-d",
+  members: [
+    { _id : 0, host : "mongo-shard-d-0.mongo-shard-d:27018" }
+  ]
+ }
+)
 
 4.3
+sh.addShard( "shard-d/mongo-shard-d-0.mongo-shard-d:27018")
+{
+	"shardAdded" : "shard-d",
+	"ok" : 1,
+	"$clusterTime" : {
+		"clusterTime" : Timestamp(1702644140, 5),
+		"signature" : {
+			"hash" : BinData(0,"AAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+			"keyId" : NumberLong(0)
+		}
+	},
+	"operationTime" : Timestamp(1702644140, 5)
+}
+
+4.4
+nie
+
+4.6
+tak
 
 5.4
+nie
+
 
 
